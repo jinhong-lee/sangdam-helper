@@ -147,36 +147,70 @@ function route() {
 }
 
 const navToggled = new Map(); // 아동별로 사용자가 직접 펼침/접음을 바꾼 상태
+let navQuery = '';
+// 검색: 이미 불러온 목록 안에서만 찾음 → 서버 조회 없음(무료 사용량 소모 없음)
+function hl(text, q) {
+  const t = esc(text);
+  if (!q) return t;
+  const i = text.toLowerCase().indexOf(q);
+  if (i < 0) return t;
+  return esc(text.slice(0, i)) + '<mark>' + esc(text.slice(i, i + q.length)) + '</mark>' + esc(text.slice(i + q.length));
+}
 function renderNav() {
   const h = location.hash || '#/';
   const [, page, a] = h.split('/');
   const curRecord = editor?.id || (page === 'r' ? a : null);
   const curClient = editor?.clientId || (page === 'c' ? a : null);
+  const q = navQuery.trim().toLowerCase();
+  const groups = clients.map((c) => {
+    let recs = clientRecords(c.id).slice().sort((x, y) => y.createdAt - x.createdAt);
+    const nameHit = !q || c.name.toLowerCase().includes(q);
+    if (q && !nameHit) recs = recs.filter((r) => (r.title || '').toLowerCase().includes(q));
+    return { c, recs, show: nameHit || recs.length, total: clientRecords(c.id).length };
+  }).filter((g) => g.show);
   $('#nav').innerHTML = `
-    <a href="#/" class="${h === '#/' || h === '' ? 'on' : ''}">전체 기록 <span class="cnt">${records.length}</span></a>
-    <div class="nav-gap"></div>
-    <div class="side-title">아동</div>
-    ${clients.map((c) => {
-      const recs = clientRecords(c.id).slice().sort((x, y) => y.createdAt - x.createdAt);
-      const open = navToggled.has(c.id) ? navToggled.get(c.id) : c.id === curClient;
+    ${groups.map(({ c, recs, total }) => {
+      const open = q ? true : navToggled.has(c.id) ? navToggled.get(c.id) : c.id === curClient;
       const cls = page === 'c' && a === c.id ? 'on' : c.id === curClient ? 'parent' : '';
       return `<div class="tree">
         <div class="tree-row">
           <button class="tw" data-tw="${c.id}" aria-expanded="${open}" aria-label="${esc(c.name)} 기록 ${open ? '접기' : '펼치기'}">▸</button>
-          <a href="#/c/${c.id}" class="${cls}">${esc(c.name)} <span class="cnt">${recs.length}</span></a>
+          <a href="#/c/${c.id}" class="${cls}"><span class="kt" data-tip>${hl(c.name, q)}</span> <span class="cnt">${total}</span></a>
         </div>
         ${open ? `<div class="tree-kids">${recs.map((r) => `
-          <a href="#/r/${r.id}" class="kid ${r.id === curRecord ? 'on' : ''}" title="${esc(r.title)}">
-            <span class="ktag ${r.type}">${r.type === 'journal' ? '일지' : '분석'}</span><span class="kt">${esc(r.title)}</span>
+          <a href="#/r/${r.id}" class="kid ${r.id === curRecord ? 'on' : ''}">
+            <span class="ktag ${r.type}">${r.type === 'journal' ? '일지' : '분석'}</span><span class="kt" data-tip>${hl(r.title || '', q)}</span>
           </a>`).join('') || '<span class="kid-empty">아직 기록이 없습니다</span>'}</div>` : ''}
       </div>`;
     }).join('')}
-    <a href="#" data-add-client style="color:var(--primary)">+ 아동 추가</a>`;
-  $('#nav [data-add-client]').onclick = (e) => { e.preventDefault(); addClient(); };
+    ${q && !groups.length ? '<div class="nav-empty">검색 결과가 없습니다</div>' : ''}
+    ${q ? '' : '<a href="#" data-add-client style="color:var(--primary)">+ 아동 추가</a>'}`;
+  $('#nav [data-add-client]')?.addEventListener('click', (e) => { e.preventDefault(); addClient(); });
   $('#nav').querySelectorAll('[data-tw]').forEach((b) => {
     b.onclick = () => { navToggled.set(b.dataset.tw, b.getAttribute('aria-expanded') !== 'true'); renderNav(); };
   });
 }
+
+// 검색창
+const navSearch = $('#navSearch');
+navSearch.oninput = () => { navQuery = navSearch.value; renderNav(); };
+navSearch.onkeydown = (e) => { if (e.key === 'Escape') { navSearch.value = ''; navQuery = ''; renderNav(); } };
+
+// 말줄임된 항목만 마우스를 올리면 전체 제목을 툴팁으로 보여줌
+const navTip = document.createElement('div');
+navTip.className = 'nav-tip'; navTip.hidden = true; navTip.setAttribute('role', 'tooltip');
+document.body.appendChild(navTip);
+$('#nav').addEventListener('mouseover', (ev) => {
+  const el = ev.target.closest('a')?.querySelector('[data-tip]');
+  if (!el || el.scrollWidth <= el.clientWidth) { navTip.hidden = true; return; }
+  navTip.textContent = el.textContent;
+  navTip.hidden = false;
+  const r = el.closest('a').getBoundingClientRect();
+  navTip.style.left = Math.min(r.right + 8, window.innerWidth - navTip.offsetWidth - 8) + 'px';
+  navTip.style.top = (r.top + r.height / 2 - navTip.offsetHeight / 2) + 'px';
+});
+$('#nav').addEventListener('mouseleave', () => { navTip.hidden = true; });
+window.addEventListener('scroll', () => { navTip.hidden = true; }, { passive: true });
 
 // ---------- 아동 ----------
 async function addClient() {
@@ -351,6 +385,7 @@ function renderEditor() {
       </div>
       <div class="row head-actions">
         <span class="dirty" id="dirtyMark"></span>
+        ${e.id ? '<button class="btn danger small" id="delBtn">삭제</button>' : ''}
         <button class="btn ghost" id="saveBtn">저장</button>
         <button class="btn" id="runBtn">${e.result ? '다시 만들기' : TYPE[e.type] + ' 만들기'}</button>
       </div>
@@ -380,9 +415,7 @@ function renderEditor() {
       </div>
       <div class="status" id="status"></div>
       <div class="result" id="result"></div>
-    </div>
-
-    ${e.id ? '<div class="savebar"><span></span><button class="btn danger small" id="delBtn">삭제</button></div>' : ''}`;
+    </div>`;
 
   renderResult();
   markDirty(e.dirty);
