@@ -536,56 +536,39 @@ async function generateText(prompt, signal) {
   throw lastErr;
 }
 
-function renderBulk(host, clientId) {
+function renderBulk(host, clientId, { text, onBack, onSaved, excludeId }) {
   const lensIds = prefs.lenses_journal || manifest.lenses.filter((l) => l.journal).map((l) => l.id);
   const lensNames = manifest.lenses.filter((l) => lensIds.includes(l.id)).map((l) => l.title);
   let sessions = [], busy = false, ctrl = null;
   const box = host;
 
-  // 1단계: 붙여넣기
-  const step1 = (text = '') => {
+  // 규칙으로 못 나눴을 때: AI로 나누기 제안
+  const fallback = (msg) => {
     box.innerHTML = `
-      <div>
-        <p class="sub">여러 회기를 한 번에 적거나, 메모장·한글 파일에 적어둔 내용을 붙여넣으세요. 회기마다 상담일지가 하나씩 만들어집니다.</p>
-        <textarea id="iText" rows="12" placeholder="1회기 10월 3일 오후 4시&#10;클레이 처음 만짐, 손끝만 대다가 점점 손바닥 전체&#10;&#10;2회기 10월 10일 오후 4시&#10;모래상자에 울타리 여러 겹, '괴물이 못 들어와'">${esc(text)}</textarea>
-        <p class="hint-line">각 회기 첫 줄은 <b>"N회기"</b>로 시작해 주세요. 날짜·시간은 같은 줄에 적으면 자동으로 읽습니다. <label class="link-btn file-link">텍스트 파일(.txt) 불러오기<input type="file" id="iFile" accept=".txt,text/plain" hidden></label></p>
-        <div class="error-box" id="iErr" hidden></div>
-      </div>
+      <div class="error-box">${esc(msg)}</div>
+      <p class="hint-line">각 회기 첫 줄을 <b>"N회기"</b>로 시작하면 바로 나눌 수 있어요. 형식이 제각각이면 AI가 나눠 드려요.</p>
       <div class="bulk-actions">
-        <button class="btn" id="iSplit">회기별로 나누기</button>
+        <button class="btn ghost" id="iBack">돌아가서 고치기</button>
+        <button class="btn" id="iAI">AI로 나누기</button>
       </div>`;
-    const ta = box.querySelector('#iText');
-    box.querySelector('#iFile').onchange = async (ev) => { const f = ev.target.files[0]; if (f) ta.value = await f.text(); };
-    box.querySelector('#iSplit').onclick = () => {
-      const t = ta.value.trim();
-      if (!t) return showErr('내용을 적거나 붙여넣어 주세요.');
-      const r = splitByRule(t);
-      if (!r.sessions.length) return showErr('"N회기"로 시작하는 줄을 찾지 못했어요. 형식이 다르면 아래 [AI로 나누기]를 눌러주세요.', t);
-      sessions = r.sessions; step2(t, r.before);
-    };
-    ta.focus();
+    box.querySelector('#iBack').onclick = onBack;
+    box.querySelector('#iAI').onclick = () => runAISplit();
   };
-  const showErr = (msg, text) => {
-    const e = box.querySelector('#iErr');
-    e.hidden = false;
-    e.innerHTML = esc(msg) + (text ? ' <button class="link-btn" id="iAI">AI로 나누기</button>' : '');
-    if (text) box.querySelector('#iAI').onclick = () => runAISplit(text);
-  };
-  const runAISplit = async (text) => {
+  const runAISplit = async () => {
     if (!profile.geminiKey) { toast('AI로 나누려면 설정에서 AI 이용 키를 먼저 등록해 주세요'); return; }
     busy = true; ctrl = new AbortController();
     box.innerHTML = `<div class="status"><span class="spinner"></span>AI가 회기별로 나누고 있어요. 10~30초 정도 걸려요.</div>`;
     try {
       sessions = await splitByAI(text, ctrl.signal);
       busy = false;
-      if (!sessions.length) { step1(text); return showErr('AI도 회기를 나누지 못했어요. 각 회기 첫 줄을 "N회기"로 맞춰서 다시 시도해 주세요.'); }
-      step2(text, 0, true);
-    } catch (err) { busy = false; step1(text); showErr(friendlyError(err)); }
+      if (sessions.length < 2) return fallback('AI가 나눠봤지만 회기가 하나뿐이에요. 하나의 상담일지로 만들려면 돌아가서 [상담일지 만들기]를 누르세요.');
+      step2(0, true);
+    } catch (err) { busy = false; fallback(friendlyError(err)); }
   };
 
   // 2단계: 미리보기·수정
-  const step2 = (text, before, byAI) => {
-    const existing = clientRecords(clientId).filter((r) => r.type === 'journal').map((r) => (r.title.match(/^(\d+)회기/) || [])[1]).filter(Boolean);
+  const step2 = (before, byAI) => {
+    const existing = clientRecords(clientId).filter((r) => r.type === 'journal' && r.id !== excludeId)   // 지금 쓰던 임시 기록은 제외.map((r) => (r.title.match(/^(\d+)회기/) || [])[1]).filter(Boolean);
     box.innerHTML = `
       <div>
         <h3 class="bulk-title">${sessions.length}개 회기로 나눴어요</h3>
@@ -612,7 +595,7 @@ function renderBulk(host, clientId) {
         </label>
       </div>
       <div class="bulk-actions">
-        <button class="btn ghost" id="iBack">다시 쓰기</button>
+        <button class="btn ghost" id="iBack">돌아가서 고치기</button>
         <button class="btn" id="iGo"></button>
       </div>`;
     const rows = () => [...box.querySelectorAll('.imp-row')];
@@ -625,7 +608,7 @@ function renderBulk(host, clientId) {
     };
     box.querySelector('.imp-list').onchange = sync;
     box.querySelector('#iAuto').onchange = sync;
-    box.querySelector('#iBack').onclick = () => step1(text);
+    box.querySelector('#iBack').onclick = onBack;
     box.querySelector('#iGo').onclick = () => doImport();
     sync();
   };
@@ -688,10 +671,13 @@ function renderBulk(host, clientId) {
     box.querySelector('.bulk-actions').insertAdjacentHTML('beforeend', '<button class="btn" id="iDone">아동 화면으로</button>');
     box.querySelector('#iStop')?.remove();
     box.querySelector('#iDone').onclick = () => { location.hash = '#/c/' + clientId; };
+    await onSaved?.();
     box.querySelector('#iDone').focus();
   };
 
-  step1();
+  const r = splitByRule(text.trim());
+  if (r.sessions.length >= 2) { sessions = r.sessions; step2(r.before); }
+  else fallback('"N회기"로 시작하는 줄을 두 개 이상 찾지 못했어요.');
 }
 
 // ---------- 기록 내보내기 ----------
@@ -724,7 +710,7 @@ function exportRecords(kind) {
 }
 
 // 일반 확인 모달
-function confirmModal({ title, message, okLabel = '확인', danger = false }) {
+function confirmModal({ title, message, okLabel = '확인', cancelLabel = '취소', danger = false }) {
   return new Promise((resolve) => {
     const opener = document.activeElement;
     const back = document.createElement('div');
@@ -733,17 +719,17 @@ function confirmModal({ title, message, okLabel = '확인', danger = false }) {
       <div class="modal modal-sm" role="alertdialog" aria-modal="true" aria-labelledby="cTitle" aria-describedby="cMsg">
         <div class="modal-body"><h3 id="cTitle">${esc(title)}</h3><p class="sub" id="cMsg" style="margin:0">${esc(message)}</p></div>
         <div class="modal-actions">
-          <button class="btn ghost" data-cancel>취소</button>
+          <button class="btn ghost" data-cancel>${esc(cancelLabel)}</button>
           <button class="btn ${danger ? 'btn-delete' : ''}" data-ok>${esc(okLabel)}</button>
         </div>
       </div>`;
     document.body.appendChild(back);
     const done = (v) => { document.removeEventListener('keydown', onKey); back.remove(); opener?.focus?.(); resolve(v); };
-    const onKey = (ev) => { if (ev.key === 'Escape') done(false); };
+    const onKey = (ev) => { if (ev.key === 'Escape') done(null); };
     document.addEventListener('keydown', onKey);
     back.querySelector('[data-ok]').onclick = () => done(true);
     back.querySelector('[data-cancel]').onclick = () => done(false);
-    back.onclick = (ev) => { if (ev.target === back) done(false); };
+    back.onclick = (ev) => { if (ev.target === back) done(null); };
     back.querySelector('[data-cancel]').focus();
   });
 }
@@ -812,15 +798,15 @@ function defaultTitle(clientId, type) {
 }
 
 // ---------- 작성 방식 ----------
-// sentence: 문장으로 쓰기(자유 서술 칸 하나) / fields: 항목별로 쓰기 / bulk: 여러 회기 한꺼번에(새 상담일지만)
-const MODES = { sentence: '문장으로 쓰기', fields: '항목별로 쓰기', bulk: '여러 회기 한꺼번에' };
+// sentence: 문장으로 쓰기(자유 서술 칸 하나, 여러 회기를 붙여넣으면 회기별로 나눠 저장 가능) / fields: 항목별로 쓰기
+const MODES = { sentence: '문장으로 쓰기', fields: '항목별로 쓰기' };
 const freeField = (type) => manifest.fields[type].find((f) => f.free);
 const modeFields = (type, mode) => manifest.fields[type].filter((f) => (mode === 'sentence' ? f.free : !f.free));
 const OLD_FREE = { journal: '회기 메모', analysis: '사례 메모' };   // 예전 칸 이름 → 새 이름으로 옮김
 function inferMode(src) {
   if (src.mode) return src.mode;
   const inp = src.inputs || {};
-  if (!src.id) return prefs['mode_' + src.type] || 'sentence';
+  if (!src.id) return MODES[prefs['mode_' + src.type]] ? prefs['mode_' + src.type] : 'sentence';
   const free = freeField(src.type)?.label;
   const hasFree = (inp[free] || '').trim();
   const hasOther = modeFields(src.type, 'fields').some((f) => (inp[f.label] || '').trim());
@@ -850,16 +836,23 @@ function openEditor(src) {
     editingResult: false,
   };
   editor.mode = inferMode({ ...src, inputs: editor.inputs });
-  if (editor.mode === 'bulk' && (editor.id || type !== 'journal')) editor.mode = 'sentence';
   renderEditor();
 }
 
 function renderEditorBody() {
   const e = editor, host = $('#editorBody');
-  const bulk = e.mode === 'bulk';
-  $('#runBtn').hidden = bulk;
-  $('#outCard').classList.toggle('hidden', bulk || !e.result);
-  if (bulk) { renderBulk(host, e.clientId); return; }
+  const splitting = !!e.splitting;
+  $('#runBtn').hidden = splitting;
+  $('#outCard').classList.toggle('hidden', splitting || !e.result);
+  if (splitting) {
+    renderBulk(host, e.clientId, {
+      text: e.inputs[freeField('journal').label] || '',
+      onBack: () => { e.splitting = false; renderEditor(); },
+      onSaved: () => discardDraft(e),
+      excludeId: e.id,
+    });
+    return;
+  }
   const sentence = e.mode === 'sentence';
   host.innerHTML = `
     <p class="sub">${sentence
@@ -876,8 +869,39 @@ function renderEditorBody() {
       </div>`).join('')}`;
   $('#title').oninput = (ev) => { e.title = ev.target.value; markDirty(true); };
   host.querySelectorAll('textarea[data-label]').forEach((t) => {
-    t.oninput = () => { e.inputs[t.dataset.label] = t.value; markDirty(true); };
+    t.oninput = () => { e.inputs[t.dataset.label] = t.value; markDirty(true); if (t.classList.contains('free')) updateSplitHint(); };
   });
+  if (canSplit(e)) {
+    host.querySelector('textarea.free').insertAdjacentHTML('afterend', '<div class="split-hint" id="splitHint" aria-live="polite"></div>');
+    updateSplitHint();
+  }
+}
+// 상담일지 문장 칸에 여러 회기가 들어 있으면 회기별로 나눠 저장할 수 있게 안내
+const canSplit = (e) => e.type === 'journal' && e.mode === 'sentence' && !e.result;
+const sessionCount = (e) => splitByRule((e.inputs[freeField('journal').label] || '').trim()).sessions.length;
+function updateSplitHint() {
+  const e = editor, el = $('#splitHint'); if (!e || !el) return;
+  const n = sessionCount(e);
+  el.className = 'split-hint' + (n >= 2 ? ' on' : '');
+  el.innerHTML = n >= 2
+    ? `<span>📋 <b>${n}개 회기</b>가 들어 있어요. 회기별로 나누면 상담일지가 ${n}개 만들어져요.</span><button class="btn h32" id="splitBtn">회기별로 나눠 저장</button>`
+    : '<span>여러 회기를 한꺼번에 붙여넣었나요?</span><button class="link-btn" id="splitBtn">회기별로 나누기</button>';
+  $('#splitBtn').onclick = () => startSplit();
+}
+function startSplit() {
+  const e = editor;
+  if (!(e.inputs[freeField('journal').label] || '').trim()) return toast('먼저 내용을 적거나 붙여넣어 주세요');
+  e.splitting = true;
+  renderEditor();
+}
+// 나눠 저장한 뒤, 문장 칸 내용이 자동 저장되며 생긴 원본 기록은 지움 (같은 내용이 두 번 남지 않게)
+async function discardDraft(e) {
+  clearTimeout(autoT);
+  await saveChain;
+  if (!e.id) return;
+  try { await deleteDoc(userDoc('records', e.id)); } catch {}
+  records = records.filter((r) => r.id !== e.id);
+  e.id = null; e.dirty = false;
 }
 
 function renderEditor() {
@@ -897,7 +921,7 @@ function renderEditor() {
 
     <div class="card">
       <div class="seg" role="tablist" aria-label="작성 방식">
-        ${Object.entries(MODES).filter(([k]) => k !== 'bulk' || (e.type === 'journal' && !e.id)).map(([k, v]) => `
+        ${Object.entries(MODES).map(([k, v]) => `
           <button role="tab" class="seg-btn ${e.mode === k ? 'on' : ''}" aria-selected="${e.mode === k}" data-mode="${k}">${v}</button>`).join('')}
       </div>
       <div id="editorBody"></div>
@@ -922,7 +946,8 @@ function renderEditor() {
     b.onclick = () => {
       if (e.mode === b.dataset.mode) return;
       e.mode = b.dataset.mode;
-      if (e.mode !== 'bulk') prefs['mode_' + e.type] = e.mode, savePrefs(prefs);
+      e.splitting = false;
+      prefs['mode_' + e.type] = e.mode; savePrefs(prefs);
       if (e.id) markDirty(true);
       renderEditor();
     };
@@ -940,10 +965,18 @@ function renderEditor() {
 }
 
 // ---------- 만들기 전 이론 선택 모달 (만들 때마다, 다시 만들 때도 항상 띄움) ----------
-function openRunModal() {
+async function openRunModal() {
   const e = editor;
   if (!profile.geminiKey) { toast('먼저 설정에서 AI 이용 키를 등록해 주세요'); location.hash = '#/settings'; return; }
   if (!buildPrompt().filledCount) return toast('내용을 하나 이상 입력해 주세요');
+  if (canSplit(e)) {
+    const n = sessionCount(e);
+    if (n >= 2) {
+      const pick = await confirmModal({ title: `${n}개 회기가 들어 있어요`, message: '회기별로 나눠 각각 상담일지로 저장할까요? 전체를 하나의 상담일지로 만들려면 [하나로 만들기]를 누르세요.', okLabel: '회기별로 나누기', cancelLabel: '하나로 만들기' });
+      if (pick === null) return;
+      if (pick) return startSplit();
+    }
+  }
   const prevCount = clientRecords(e.clientId).filter((r) => r.id !== e.id && r.result).length;
   const opener = document.activeElement;
   const back = document.createElement('div');
