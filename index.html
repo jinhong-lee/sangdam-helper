@@ -98,8 +98,9 @@
   .nav a.on { background: var(--primary-soft); color: var(--primary); font-weight: 700; }
   .nav .cnt { font-size: 12px; color: var(--text-2); }
   .nav-gap { height: 14px; }
-  .nav-search { margin-bottom: 10px; }
-  .nav-search input { width: 100%; font-size: 13px; padding: 8px 10px; }
+  .nav-search { position: relative; margin-bottom: 10px; }
+  .nav-search svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--text-2); pointer-events: none; }
+  .nav-search input[type="search"] { height: 32px; padding: 0 10px 0 30px; font-size: 13px; border-radius: 8px; }
   .nav mark { background: var(--accent-soft); color: inherit; border-radius: 3px; padding: 0 1px; }
   .nav-empty { font-size: 13px; color: var(--text-2); padding: 8px 10px; }
   .nav-tip { position: fixed; z-index: 200; max-width: 320px; padding: 6px 10px; border-radius: 8px; background: var(--text); color: var(--surface); font-size: 12.5px; line-height: 1.45; pointer-events: none; box-shadow: 0 4px 14px rgba(0,0,0,.18); }
@@ -297,6 +298,7 @@
   <div class="layout">
     <aside class="sidebar">
       <div class="nav-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>
         <input type="search" id="navSearch" placeholder="아동 이름·기록 제목 검색" aria-label="아동 이름이나 기록 제목 검색" autocomplete="off">
       </div>
       <nav class="nav" id="nav"></nav>
