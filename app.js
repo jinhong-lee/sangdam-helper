@@ -10,7 +10,7 @@ import { firebaseConfig } from './firebase-config.js';
 const GEMINI = 'https://generativelanguage.googleapis.com/v1beta';
 const PREFS = 'sangdam-helper:prefs';
 const TYPE = { analysis: '사례 분석', journal: '상담일지' };
-const SHORT = { analysis: '사례', journal: '일지' }; // 다시 만들기 버튼용 짧은 이름
+const SHORT = { analysis: '사례', journal: '일지' }; // 다시 생성 버튼용 짧은 이름
 const HISTORY_COUNT = 3;
 
 const $ = (s) => document.querySelector(s);
@@ -112,8 +112,17 @@ $('#loginBtn').onclick = async () => {
     err.classList.remove('hidden');
   }
 };
+// 저장하지 않은 내용이 있을 때 물어봄 → true: 계속 진행, false: 멈춤
+async function askUnsaved(actionLabel) {
+  if (!editor?.dirty) return true;
+  const pick = await confirmModal({ title: '저장하지 않은 내용이 있어요', message: `${actionLabel} 전에 저장할까요? 저장하지 않으면 지금 적은 내용이 사라집니다.`, okLabel: `저장하고 ${actionLabel}`, cancelLabel: `저장 안 하고 ${actionLabel}` });
+  if (pick === null) return false;
+  if (pick) { try { await saveEditor(true); } catch { return false; } }
+  else if (editor) editor.dirty = false;
+  return true;
+}
 $('#logoutBtn').onclick = async () => {
-  if (editor?.dirty) { try { await saveEditor(true); } catch { return; } }
+  if (!(await askUnsaved('로그아웃'))) return;
   running?.abort();
   await signOut(auth);
   location.hash = '';
@@ -122,17 +131,21 @@ $('#logoutBtn').onclick = async () => {
 // ---------- 화면 이동 ----------
 let lastHash = location.hash;
 let skipHash = false;
-window.addEventListener('hashchange', () => {
+window.addEventListener('hashchange', async () => {
   if (skipHash) { skipHash = false; return; }
-  if (editor?.dirty) saveEditor(true);      // 확인 없이 바로 저장하고 이동
+  if (editor?.dirty) {
+    const target = location.hash;
+    skipHash = true; location.hash = lastHash;          // 일단 지금 화면에 머문 채로 물어봄
+    if (!(await askUnsaved('이동'))) return;
+    location.hash = target;
+    return;
+  }
   lastHash = location.hash;
   route();
 });
 window.addEventListener('beforeunload', (e) => {
-  if (editor?.dirty || editor?.saveState === 'saving') { saveEditor(true); e.preventDefault(); e.returnValue = ''; }
+  if (editor?.dirty || editor?.saveState === 'saving') { e.preventDefault(); e.returnValue = ''; }
 });
-// 폰에서 다른 앱으로 넘어갈 때도 바로 저장
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && editor?.dirty) saveEditor(true); });
 // Cmd/Ctrl+S로 즉시 저장
 document.addEventListener('keydown', (ev) => {
   if ((ev.metaKey || ev.ctrlKey) && ev.key === 's' && editor) { ev.preventDefault(); editor.dirty = true; saveEditor(false); }
@@ -561,7 +574,7 @@ function renderBulk(host, clientId, { text, onBack, onSaved, excludeId }) {
     try {
       sessions = await splitByAI(text, ctrl.signal);
       busy = false;
-      if (sessions.length < 2) return fallback('AI가 나눠봤지만 회기가 하나뿐이에요. 하나의 상담일지로 만들려면 돌아가서 [상담일지 만들기]를 누르세요.');
+      if (sessions.length < 2) return fallback('AI가 나눠봤지만 회기가 하나뿐이에요. 하나의 상담일지로 만들려면 돌아가서 [+ 상담일지 생성]을 누르세요.');
       step2(0, true);
     } catch (err) { busy = false; fallback(friendlyError(err)); }
   };
@@ -589,7 +602,7 @@ function renderBulk(host, clientId, { text, onBack, onSaved, excludeId }) {
         }).join('')}</div>
         <label class="check modal-hist">
           <input type="checkbox" id="iAuto" ${profile.geminiKey ? '' : 'disabled'}>
-          <span>저장하고 상담일지 내용까지 AI로 만들기
+          <span>저장하고 상담일지 내용까지 AI로 생성
             <small>${profile.geminiKey ? `회기당 30초~1분 걸려요. 적용 이론: ${lensNames.length ? esc(lensNames.join(', ')) : '없음'} (마지막으로 고른 설정)` : '설정에서 AI 이용 키를 등록하면 쓸 수 있어요'}</small>
           </span>
         </label>
@@ -604,7 +617,7 @@ function renderBulk(host, clientId, { text, onBack, onSaved, excludeId }) {
       const auto = box.querySelector('#iAuto').checked;
       const go = box.querySelector('#iGo');
       go.disabled = !n;
-      go.textContent = n ? (auto ? `상담일지 ${n}개 저장하고 내용까지 만들기` : `상담일지 ${n}개로 저장`) : '저장할 회기를 선택하세요';
+      go.textContent = n ? (auto ? `상담일지 ${n}개 저장하고 내용까지 생성` : `상담일지 ${n}개로 저장`) : '저장할 회기를 선택하세요';
     };
     box.querySelector('.imp-list').onchange = sync;
     box.querySelector('#iAuto').onchange = sync;
@@ -662,7 +675,7 @@ function renderBulk(host, clientId, { text, onBack, onSaved, excludeId }) {
             }
           }
         }
-        prog(`상담일지 ${created.length}개를 저장하고, ${ok}개의 내용을 만들었어요.` + (ok < created.length ? ' 못 만든 회기는 열어서 [상담일지 만들기]를 눌러주세요.' : ''));
+        prog(`상담일지 ${created.length}개를 저장하고, ${ok}개의 내용을 만들었어요.` + (ok < created.length ? ' 못 만든 회기는 열어서 [+ 상담일지 생성]을 눌러주세요.' : ''));
       } else prog(`상담일지 ${created.length}개를 저장했어요.`);
     } catch (err) {
       prog('저장하지 못했습니다: ' + friendlyError(err));
@@ -843,6 +856,7 @@ function renderEditorBody() {
   const e = editor, host = $('#editorBody');
   const splitting = !!e.splitting;
   $('#runBtn').hidden = splitting;
+  $('#saveBtn').hidden = splitting;
   $('#outCard').classList.toggle('hidden', splitting || !e.result);
   if (splitting) {
     renderBulk(host, e.clientId, {
@@ -915,7 +929,8 @@ function renderEditor() {
       <div class="row head-actions">
         <span class="save-state" id="dirtyMark" aria-live="polite"></span>
         ${e.id ? '<button class="btn danger small" id="delBtn">삭제</button>' : ''}
-        <button class="btn" id="runBtn">${e.result ? SHORT[e.type] + ' 다시 만들기' : TYPE[e.type] + ' 만들기'}</button>
+        <button class="btn h32" id="saveBtn" disabled>내용 저장</button>
+        <button class="btn h32" id="runBtn">${e.result ? SHORT[e.type] + ' 다시 생성' : '+ ' + TYPE[e.type] + ' 생성'}</button>
       </div>
     </div>
 
@@ -954,6 +969,7 @@ function renderEditor() {
   });
 
   $('#runBtn').onclick = openRunModal;
+  $('#saveBtn').onclick = () => saveEditor(false);
   $('#copyBtn').onclick = () => copyText(e.result);
   $('#editResultBtn').onclick = () => {
     if (e.editingResult) e.result = $('#resultEdit').value;
@@ -972,7 +988,7 @@ async function openRunModal() {
   if (canSplit(e)) {
     const n = sessionCount(e);
     if (n >= 2) {
-      const pick = await confirmModal({ title: `${n}개 회기가 들어 있어요`, message: '회기별로 나눠 각각 상담일지로 저장할까요? 전체를 하나의 상담일지로 만들려면 [하나로 만들기]를 누르세요.', okLabel: '회기별로 나누기', cancelLabel: '하나로 만들기' });
+      const pick = await confirmModal({ title: `${n}개 회기가 들어 있어요`, message: '회기별로 나눠 각각 상담일지로 저장할까요? 전체를 하나의 상담일지로 생성하려면 [하나로 생성]을 누르세요.', okLabel: '회기별로 나누기', cancelLabel: '하나로 생성' });
       if (pick === null) return;
       if (pick) return startSplit();
     }
@@ -984,7 +1000,7 @@ async function openRunModal() {
   back.innerHTML = `
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
       <div class="modal-body">
-        <h3 id="mTitle">${e.result ? SHORT[e.type] + ' 다시 만들기' : TYPE[e.type] + ' 만들기'}</h3>
+        <h3 id="mTitle">${e.result ? SHORT[e.type] + ' 다시 생성' : TYPE[e.type] + ' 생성'}</h3>
         <p class="sub">적용할 이론을 고르세요. 하나도 고르지 않으면 이론 없이 입력 내용만으로 작성합니다.</p>
         <div class="row" style="margin:-4px 0 6px"><button class="link-btn" data-all>모두 선택</button><button class="link-btn" data-none>모두 해제</button></div>
         <div id="mLenses">${manifest.lenses.map((l) => `
@@ -1010,7 +1026,7 @@ async function openRunModal() {
   const goBtn = back.querySelector('[data-go]');
   const sync = () => {
     const n = boxes().filter((b) => b.checked).length;
-    goBtn.textContent = n ? `이론 ${n}개 적용해 만들기` : '이론 없이 만들기';
+    goBtn.textContent = n ? `이론 ${n}개 적용해 생성` : '이론 없이 생성';
   };
   const close = () => { document.removeEventListener('keydown', onKey); back.remove(); opener?.focus?.(); };
   const onKey = (ev) => { if (ev.key === 'Escape') close(); };
@@ -1043,8 +1059,9 @@ function renderResult() {
   }
 }
 
-// ---------- 자동 저장 ----------
-// 입력을 멈추고 1.5초 뒤 저장. 저장은 한 줄로 세워 순서대로 처리하고, 저장 중 새 입력이 오면 다시 저장 대기 상태로 둠.
+// ---------- 저장 ----------
+// 내용은 [내용 저장]을 눌러야 저장됨(자동 저장 없음). AI 결과 생성 직후에는 결과를 잃지 않도록 바로 저장.
+// 저장은 한 줄로 세워 순서대로 처리.
 let autoT = null;
 let saveChain = Promise.resolve();
 function setSaveState(e, state) {
@@ -1052,7 +1069,8 @@ function setSaveState(e, state) {
   if (editor !== e) return;
   const m = $('#dirtyMark'); if (!m) return;
   m.className = 'save-state ' + state;
-  m.innerHTML = { idle: '', dirty: '입력 중…', saving: '저장 중…', saved: '✓ 저장됨', error: '저장 실패 · <button class="link-btn" id="retrySave">다시 시도</button>' }[state] || '';
+  m.innerHTML = { idle: '', dirty: '저장 안 됨', saving: '저장 중…', saved: '✓ 저장됨', error: '저장 실패 · <button class="link-btn" id="retrySave">다시 시도</button>' }[state] || '';
+  const sb = $('#saveBtn'); if (sb) sb.disabled = !(state === 'dirty' || state === 'error');
   if (state === 'error') $('#retrySave').onclick = () => saveEditor(true);
 }
 function markDirty(on) {
@@ -1061,8 +1079,6 @@ function markDirty(on) {
   if (!on) return;
   e.rev = (e.rev || 0) + 1;
   setSaveState(e, 'dirty');
-  clearTimeout(autoT);
-  autoT = setTimeout(() => { if (editor === e && e.dirty) saveEditor(true); }, 1500);
 }
 function saveEditor(silent = true) {
   const e = editor; if (!e) return Promise.resolve();
