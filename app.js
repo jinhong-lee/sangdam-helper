@@ -862,7 +862,7 @@ function renderEditor() {
 
     <div class="card">
       <h3>${e.type === 'analysis' ? '내담자 정보' : '회기 키워드'}</h3>
-      <p class="sub">아는 것만 키워드로 적어도 됩니다. 빈 칸은 건너뜁니다.</p>
+      <p class="sub">문장이든 키워드든 편한 방식으로 적으세요. 맨 위 메모 칸에 문장으로만 적어도 AI가 칸별로 나눠 정리합니다. 빈 칸은 건너뜁니다.</p>
       <div class="field">
         <label for="title">제목</label>
         <input type="text" id="title" value="${esc(e.title)}">
