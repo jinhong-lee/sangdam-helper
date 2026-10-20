@@ -872,9 +872,10 @@ function renderEditorBody() {
     return;
   }
   const sentence = e.mode === 'sentence';
-  const autoTitle = sentence && e.type === 'journal';   // 상담일지 문장 쓰기는 제목을 내용 첫 줄(N회기·날짜)에서 자동으로 만듦
+  const editForm = isEditForm(e);
+  const autoTitle = sentence && e.type === 'journal' && !editForm;   // 새 상담일지 문장 쓰기는 제목을 내용 첫 줄(N회기·날짜)에서 자동으로 만듦
   host.innerHTML = `
-    <p class="sub">${sentence
+    <p class="sub">${editForm ? '작성할 때 고른 방식과 관계없이, 저장된 기록은 제목과 내용으로 수정해요. 고친 뒤 [다시 생성]을 누르면 결과에도 반영됩니다.' : sentence
       ? (e.type === 'journal' ? '회기마다 첫 줄에 "N회기 날짜 시간"을 적고 내용을 이어서 쓰세요. 지난 회기까지 여러 개를 한꺼번에 넣으면 회기별 상담일지로 나눠 저장됩니다.' : '내담자와 사례에 대해 아는 내용을 편하게 문장으로 적으세요. AI가 항목별로 나눠 분석합니다.')
       : '아는 항목만 키워드나 짧은 문장으로 적으세요. 빈 칸은 건너뜁니다.'}</p>
     ${autoTitle ? '' : `<div class="field">
@@ -896,7 +897,7 @@ function renderEditorBody() {
   }
 }
 // 상담일지 문장 칸에 여러 회기가 들어 있으면 회기별로 나눠 저장할 수 있게 안내
-const canSplit = (e) => e.type === 'journal' && e.mode === 'sentence' && !e.result;
+const canSplit = (e) => e.type === 'journal' && e.mode === 'sentence' && !e.result && !isEditForm(e);
 const sessionCount = (e) => splitByRule((e.inputs[freeField('journal').label] || '').trim()).sessions.length;
 function updateSplitHint() {
   const e = editor, el = $('#splitHint'); if (!e || !el) return;
@@ -916,7 +917,7 @@ function startSplit(autoGen) {
 }
 // 회기가 하나면 첫 줄의 "N회기 날짜 시간"으로 제목을 만듦
 function applyAutoTitle(e) {
-  if (!(e.type === 'journal' && e.mode === 'sentence')) return;
+  if (!(e.type === 'journal' && e.mode === 'sentence') || isEditForm(e)) return;   // 수정 중엔 사용자가 고친 제목 유지
   const r = splitByRule((e.inputs[freeField('journal').label] || '').trim());
   if (r.sessions.length === 1 && /회기/.test(r.sessions[0].title)) e.title = r.sessions[0].title;
 }
@@ -968,9 +969,8 @@ function renderReadView() {
       <div class="status" id="status"></div>
       <div class="result" id="result"></div>
     </div>
-    ${e.result ? '' : `<div class="card empty" style="margin-bottom:18px"><b>아직 생성된 ${TYPE[e.type]}이 없어요</b>오른쪽 위 [+ ${TYPE[e.type]} 생성]을 누르면 아래 내용으로 만들어 드려요.</div>`}
 
-    <div class="card read-inputs" style="margin-top:18px">
+    <div class="card read-inputs" style="margin-top:${e.result ? 18 : 0}px">
       <div class="out-head"><h3>입력한 내용</h3><span class="sub" style="margin:0">${MODES[e.mode] || ''}</span></div>
       ${fields.length ? fields.map((f) => `
         <div class="read-field">
@@ -980,11 +980,21 @@ function renderReadView() {
     </div>`;
   e.editingResult = false;
   renderResult();
-  $('#editBtn').onclick = () => { e.editing = true; renderEditor(); };
+  $('#editBtn').onclick = () => { normalizeForEdit(e); e.editing = true; renderEditor(); };
   $('#runBtn').onclick = openRunModal;
   $('#copyBtn').onclick = () => copyText(e.result);
   $('#delBtn').onclick = () => removeRecord(e.id);
 }
+
+// 수정 화면은 작성 방식과 관계없이 "제목 + 내용" 하나의 폼. 항목별로 쓴 내용은 "항목: 값" 줄로 합쳐 옮김(내용 손실 없음).
+function normalizeForEdit(e) {
+  if (e.mode === 'sentence') return;
+  const free = freeField(e.type).label;
+  const lines = modeFields(e.type, 'fields').filter((f) => (e.inputs[f.label] || '').trim()).map((f) => `${f.label}: ${e.inputs[f.label].trim()}`);
+  e.inputs[free] = [(e.inputs[free] || '').trim(), lines.join('\n')].filter(Boolean).join('\n\n');
+  e.mode = 'sentence';
+}
+const isEditForm = (e) => e.editing && !!e.id;   // 저장된 기록 수정 중
 
 // ---------- 편집 화면 ----------
 function renderEditForm() {
@@ -1004,10 +1014,10 @@ function renderEditForm() {
     </div>
 
     <div class="card">
-      <div class="seg" role="tablist" aria-label="작성 방식">
+      ${isEditForm(e) ? '' : `<div class="seg" role="tablist" aria-label="작성 방식">
         ${Object.entries(MODES).map(([k, v]) => `
           <button role="tab" class="seg-btn ${e.mode === k ? 'on' : ''}" aria-selected="${e.mode === k}" data-mode="${k}">${v}</button>`).join('')}
-      </div>
+      </div>`}
       <div id="editorBody"></div>
     </div>
 
@@ -1370,7 +1380,6 @@ async function run() {
   e.editingResult = false;
   const erb = $('#editResultBtn'); if (erb) erb.textContent = '직접 수정';
   $('#outCard').classList.remove('hidden');
-  document.querySelector('#main .card.empty')?.remove();
   $('#runBtn').disabled = true;
   const before = e.result;
   let partial = '';

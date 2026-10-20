@@ -100,9 +100,9 @@
   .nav a.on { background: var(--primary-soft); color: var(--primary); font-weight: 700; }
   .nav .cnt { font-size: 12px; color: var(--text-2); }
   .nav-gap { height: 14px; }
-  .nav-add { display: block; width: 100%; text-align: left; margin-bottom: 8px; padding: 8px 10px; border: 0; border-radius: 9px; background: none; font: inherit; font-size: 14px; font-weight: 600; color: var(--primary); cursor: pointer; }
+  .nav-add { display: block; width: 100%; text-align: left; margin: -4px 0 6px; padding: 8px 10px; border: 0; border-radius: 9px; background: none; font: inherit; font-size: 14px; font-weight: 600; color: var(--primary); cursor: pointer; }
   .nav-add:hover { background: var(--surface-2); }
-  .nav-search { position: relative; margin-bottom: 10px; }
+  .nav-search { position: relative; margin-bottom: 8px; }
   .nav-search svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--text-2); pointer-events: none; }
   .nav-search input[type="search"] { height: 32px; padding: 0 10px 0 30px; font-size: 13px; border-radius: 8px; }
   .nav mark { background: var(--accent-soft); color: inherit; border-radius: 3px; padding: 0 1px; }
@@ -343,11 +343,11 @@
   </header>
   <div class="layout">
     <aside class="sidebar">
-      <button class="nav-add" id="navAddClient">+ 내담자 추가</button>
       <div class="nav-search">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>
         <input type="search" id="navSearch" placeholder="내담자 이름·기록 제목 검색" aria-label="내담자 이름이나 기록 제목 검색" autocomplete="off">
       </div>
+      <button class="nav-add" id="navAddClient">+ 내담자 추가</button>
       <nav class="nav" id="nav"></nav>
     </aside>
     <main id="main"></main>
