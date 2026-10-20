@@ -647,11 +647,11 @@ function viewSettings() {
           <li><span><a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">구글 AI 스튜디오 열기 ↗</a> 를 누르고 같은 구글 계정으로 로그인합니다.</span></li>
           <li><span>약관 동의 화면이 나오면 동의합니다.</span></li>
           <li><span><b>Create API key</b>(API 키 만들기)를 누릅니다.</span></li>
-          <li><span>만들어진 키(AIza로 시작)를 복사해서 아래 칸에 붙여넣고 <b>저장</b>을 누릅니다.</span></li>
+          <li><span>만들어진 키를 복사해서 아래 칸에 붙여넣고 <b>저장</b>을 누릅니다.</span></li>
         </ol>
         <div class="field">
           <label for="keyInput">이용 키</label>
-          <input type="password" id="keyInput" placeholder="AIza로 시작하는 키를 붙여넣으세요" autocomplete="off" value="${esc(profile.geminiKey || '')}">
+          <input type="password" id="keyInput" placeholder="복사한 키를 붙여넣으세요" autocomplete="off" value="${esc(profile.geminiKey || '')}">
           <div class="key-state ${profile.geminiKey ? 'ok' : ''}" id="keyState">${profile.geminiKey ? '✓ 등록된 키가 있습니다' : ''}</div>
         </div>
         <div class="row">
