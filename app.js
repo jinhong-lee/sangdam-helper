@@ -289,9 +289,16 @@ function viewHome() {
     return;
   }
   $('#main').innerHTML = `
-    <div class="page-head"><h2>전체 기록</h2></div>
+    <div class="page-head" style="align-items:center"><h2>전체 기록</h2><button class="btn" id="homeAddClient">+ 아동 추가</button></div>
     ${profile.geminiKey ? '' : '<div class="card" style="margin-bottom:16px">결과를 만들려면 먼저 AI 이용 키를 등록해 주세요. <a href="#/settings">설정으로 가기</a></div>'}
-    ${listHTML(records, true)}`;
+    ${records.length ? listHTML(records, true) : `
+      <div class="card empty">
+        <b>아직 기록이 없습니다</b>
+        왼쪽에서 아동을 골라 첫 기록을 만들거나, 새 아동을 추가해 보세요.
+        <div style="margin-top:18px"><button class="btn ghost" id="emptyAddClient">+ 아동 추가</button></div>
+      </div>`}`;
+  $('#homeAddClient').onclick = addClient;
+  $('#emptyAddClient')?.addEventListener('click', addClient);
   bindList();
 }
 
@@ -364,7 +371,12 @@ function confirmDelete(title, message) {
     const onKey = (ev) => { if (ev.key === 'Escape') done(false); };
     document.addEventListener('keydown', onKey);
     input.oninput = () => { ok.disabled = input.value.trim() !== '삭제'; };
-    input.onkeydown = (ev) => { if (ev.key === 'Enter' && !ok.disabled) done(true); };
+    // 한글 입력 시 Enter가 글자 조합 확정에 쓰여 keydown이 무시될 수 있어 keyup에서 값으로 직접 확인
+    input.onkeyup = (ev) => {
+      if (ev.key !== 'Enter' || ev.isComposing) return;
+      ok.disabled = input.value.trim() !== '삭제';
+      if (!ok.disabled) done(true);
+    };
     ok.onclick = () => done(true);
     back.querySelector('[data-cancel]').onclick = () => done(false);
     back.onclick = (ev) => { if (ev.target === back) done(false); };
