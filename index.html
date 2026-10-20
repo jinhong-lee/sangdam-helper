@@ -79,10 +79,26 @@
   .nav a.on { background: var(--primary-soft); color: var(--primary); font-weight: 700; }
   .nav .cnt { font-size: 12px; color: var(--text-2); }
   .nav-gap { height: 14px; }
+  .tree-row { display: flex; align-items: center; gap: 2px; }
+  .tree-row a { flex: 1; min-width: 0; }
+  .nav a.parent { font-weight: 700; }
+  .tw { width: 22px; height: 22px; flex-shrink: 0; border: 0; background: none; color: var(--text-2); cursor: pointer; border-radius: 6px; font-size: 11px; transition: transform .15s; }
+  .tw:hover { background: var(--surface-2); color: var(--text); }
+  .tw[aria-expanded="true"] { transform: rotate(90deg); }
+  .tree-kids { display: grid; gap: 1px; margin: 2px 0 8px 22px; padding-left: 6px; border-left: 1px solid var(--border); }
+  .nav a.kid { justify-content: flex-start; gap: 6px; padding: 6px 8px; font-size: 13px; color: var(--text-2); }
+  .nav a.kid.on { color: var(--primary); }
+  .kid .kt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ktag { flex-shrink: 0; font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 999px; }
+  .ktag.analysis { background: var(--accent-soft); color: var(--accent); }
+  .ktag.journal { background: var(--primary-soft); color: var(--primary); }
+  .kid-empty { font-size: 12.5px; color: var(--text-2); padding: 6px 8px; }
   @media (max-width: 860px) {
     .nav { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
     .nav a { white-space: nowrap; background: var(--surface); border: 1px solid var(--border); }
     .nav-gap, .side-title { display: none; }
+    .tree, .tree-row { display: contents; }
+    .tw, .tree-kids { display: none; }
   }
 
   /* 공통 요소 */
@@ -94,6 +110,16 @@
   .eyebrow { font-size: 12px; color: var(--accent); font-weight: 700; }
   .back { font-size: 13px; color: var(--text-2); text-decoration: none; display: inline-block; margin-bottom: 6px; }
   .back:hover { color: var(--primary); }
+  .editor-head { align-items: center; }
+  .head-actions { align-items: center; }
+  .head-actions .dirty { font-size: 12.5px; }
+  .modal-back { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,.4); display: grid; place-items: center; padding: 16px; }
+  .modal { width: 100%; max-width: 560px; max-height: calc(100vh - 32px); display: flex; flex-direction: column; background: var(--surface); border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+  .modal-body { overflow: auto; padding: 22px 22px 10px; }
+  .modal-body h3 { font-size: 17px; margin: 0 0 4px; }
+  .modal-hist { margin-top: 10px; padding-top: 14px; border-top: 1px solid var(--border); }
+  .modal-note { font-size: 13px; color: var(--accent); margin: 12px 0 0; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 22px; border-top: 1px solid var(--border); }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .stack { display: grid; gap: 16px; }
 

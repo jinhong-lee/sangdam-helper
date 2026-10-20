@@ -146,16 +146,36 @@ function route() {
   window.scrollTo(0, 0);
 }
 
+const navToggled = new Map(); // 아동별로 사용자가 직접 펼침/접음을 바꾼 상태
 function renderNav() {
   const h = location.hash || '#/';
-  const curClient = editor?.clientId;
+  const [, page, a] = h.split('/');
+  const curRecord = editor?.id || (page === 'r' ? a : null);
+  const curClient = editor?.clientId || (page === 'c' ? a : null);
   $('#nav').innerHTML = `
     <a href="#/" class="${h === '#/' || h === '' ? 'on' : ''}">전체 기록 <span class="cnt">${records.length}</span></a>
     <div class="nav-gap"></div>
     <div class="side-title">아동</div>
-    ${clients.map((c) => `<a href="#/c/${c.id}" class="${h === '#/c/' + c.id || curClient === c.id ? 'on' : ''}">${esc(c.name)} <span class="cnt">${clientRecords(c.id).length}</span></a>`).join('')}
+    ${clients.map((c) => {
+      const recs = clientRecords(c.id).slice().sort((x, y) => y.createdAt - x.createdAt);
+      const open = navToggled.has(c.id) ? navToggled.get(c.id) : c.id === curClient;
+      const cls = page === 'c' && a === c.id ? 'on' : c.id === curClient ? 'parent' : '';
+      return `<div class="tree">
+        <div class="tree-row">
+          <button class="tw" data-tw="${c.id}" aria-expanded="${open}" aria-label="${esc(c.name)} 기록 ${open ? '접기' : '펼치기'}">▸</button>
+          <a href="#/c/${c.id}" class="${cls}">${esc(c.name)} <span class="cnt">${recs.length}</span></a>
+        </div>
+        ${open ? `<div class="tree-kids">${recs.map((r) => `
+          <a href="#/r/${r.id}" class="kid ${r.id === curRecord ? 'on' : ''}" title="${esc(r.title)}">
+            <span class="ktag ${r.type}">${r.type === 'journal' ? '일지' : '분석'}</span><span class="kt">${esc(r.title)}</span>
+          </a>`).join('') || '<span class="kid-empty">아직 기록이 없습니다</span>'}</div>` : ''}
+      </div>`;
+    }).join('')}
     <a href="#" data-add-client style="color:var(--primary)">+ 아동 추가</a>`;
   $('#nav [data-add-client]').onclick = (e) => { e.preventDefault(); addClient(); };
+  $('#nav').querySelectorAll('[data-tw]').forEach((b) => {
+    b.onclick = () => { navToggled.set(b.dataset.tw, b.getAttribute('aria-expanded') !== 'true'); renderNav(); };
+  });
 }
 
 // ---------- 아동 ----------
@@ -293,9 +313,13 @@ async function removeRecord(id) {
 }
 
 // ---------- 작성 · 수정 화면 ----------
+function nowStamp() {
+  const d = new Date(), p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
 function defaultTitle(clientId, type) {
-  if (type === 'journal') return `${clientRecords(clientId).filter((r) => r.type === 'journal').length + 1}회기 상담일지`;
-  return `사례 분석 (${fmtDay(Date.now())})`;
+  if (type === 'journal') return `${clientRecords(clientId).filter((r) => r.type === 'journal').length + 1}회기 · ${nowStamp()}`;
+  return nowStamp();
 }
 
 function openEditor(src) {
@@ -319,46 +343,31 @@ function openEditor(src) {
 
 function renderEditor() {
   const e = editor;
-  const prevCount = clientRecords(e.clientId).filter((r) => r.id !== e.id && r.result).length;
   $('#main').innerHTML = `
-    <a class="back" href="#/c/${e.clientId}">← ${esc(clientName(e.clientId))}</a>
-    <div class="page-head" style="align-items:center">
-      <div style="flex:1;min-width:240px">
-        <div class="eyebrow">${TYPE[e.type]}${e.createdAt ? ' · ' + fmtDate(e.createdAt) : ' · 새 기록'}</div>
-        <input type="text" class="title-input" id="title" value="${esc(e.title)}" aria-label="제목">
+    <div class="page-head editor-head">
+      <div>
+        <a class="back" href="#/c/${e.clientId}">← ${esc(clientName(e.clientId))}</a>
+        <div class="eyebrow">${TYPE[e.type]}${e.createdAt ? ' · ' + fmtDate(e.createdAt) + ' 작성' : ' · 새 기록'}</div>
+      </div>
+      <div class="row head-actions">
+        <span class="dirty" id="dirtyMark"></span>
+        <button class="btn ghost" id="saveBtn">저장</button>
+        <button class="btn" id="runBtn">${e.result ? '다시 만들기' : TYPE[e.type] + ' 만들기'}</button>
       </div>
     </div>
-    <div class="grid">
-      <div class="card">
-        <h3>${e.type === 'analysis' ? '내담자 정보' : '회기 키워드'}</h3>
-        <p class="sub">아는 것만 키워드로 적어도 됩니다. 빈 칸은 건너뜁니다.</p>
-        ${manifest.fields[e.type].map((f, i) => `
-          <div class="field">
-            <label for="f${i}">${esc(f.label)}</label>
-            <textarea id="f${i}" data-label="${esc(f.label)}" placeholder="${esc(f.hint || '')}">${esc(e.inputs[f.label] || '')}</textarea>
-          </div>`).join('')}
+
+    <div class="card">
+      <h3>${e.type === 'analysis' ? '내담자 정보' : '회기 키워드'}</h3>
+      <p class="sub">아는 것만 키워드로 적어도 됩니다. 빈 칸은 건너뜁니다.</p>
+      <div class="field">
+        <label for="title">제목</label>
+        <input type="text" id="title" value="${esc(e.title)}">
       </div>
-      <aside class="side">
-        <div class="card">
-          <h3>적용할 이론</h3>
-          <p class="sub">체크한 이론을 번호 순서대로 빠짐없이 적용합니다.</p>
-          <div class="row" style="margin:-4px 0 8px"><button class="link-btn" id="allOn">모두 선택</button><button class="link-btn" id="allOff">모두 해제</button></div>
-          <div id="lenses">${manifest.lenses.map((l) => `
-            <label class="lens">
-              <input type="checkbox" value="${l.id}" ${e.lenses.includes(l.id) ? 'checked' : ''}>
-              <span><span class="num">${l.id.slice(0, 2)}</span> <span class="t">${esc(l.title)}</span><div class="d">${esc(l.desc)}</div></span>
-            </label>`).join('')}</div>
-        </div>
-        <div class="card">
-          <label class="check">
-            <input type="checkbox" id="useHistory" ${e.useHistory ? 'checked' : ''} ${prevCount ? '' : 'disabled'}>
-            <span>이 아동의 이전 기록 참고하기
-              <small>${prevCount ? `최근 기록 ${Math.min(prevCount, HISTORY_COUNT)}건을 함께 보내 변화와 흐름을 반영합니다` : '아직 참고할 이전 기록이 없습니다'}</small>
-            </span>
-          </label>
-        </div>
-        <button class="btn block" id="runBtn">${e.result ? '다시 만들기' : TYPE[e.type] + ' 바로 만들기'}</button>
-      </aside>
+      ${manifest.fields[e.type].map((f, i) => `
+        <div class="field">
+          <label for="f${i}">${esc(f.label)}</label>
+          <textarea id="f${i}" data-label="${esc(f.label)}" placeholder="${esc(f.hint || '')}">${esc(e.inputs[f.label] || '')}</textarea>
+        </div>`).join('')}
     </div>
 
     <div class="card ${e.result ? '' : 'hidden'}" id="outCard" style="margin-top:18px">
@@ -373,15 +382,7 @@ function renderEditor() {
       <div class="result" id="result"></div>
     </div>
 
-    <div class="savebar">
-      <div class="row">
-        <button class="btn" id="saveBtn">저장</button>
-        <span class="dirty" id="dirtyMark"></span>
-      </div>
-      <div class="row">
-        ${e.id ? '<button class="btn danger small" id="delBtn">삭제</button>' : ''}
-      </div>
-    </div>`;
+    ${e.id ? '<div class="savebar"><span></span><button class="btn danger small" id="delBtn">삭제</button></div>' : ''}`;
 
   renderResult();
   markDirty(e.dirty);
@@ -390,15 +391,7 @@ function renderEditor() {
   $('#main').querySelectorAll('textarea[data-label]').forEach((t) => {
     t.oninput = () => { e.inputs[t.dataset.label] = t.value; markDirty(true); };
   });
-  const syncLenses = () => {
-    e.lenses = [...document.querySelectorAll('#lenses input:checked')].map((i) => i.value);
-    prefs['lenses_' + e.type] = e.lenses; savePrefs(prefs); markDirty(true);
-  };
-  $('#lenses').onchange = syncLenses;
-  $('#allOn').onclick = () => { document.querySelectorAll('#lenses input').forEach((i) => (i.checked = true)); syncLenses(); };
-  $('#allOff').onclick = () => { document.querySelectorAll('#lenses input').forEach((i) => (i.checked = false)); syncLenses(); };
-  $('#useHistory').onchange = (ev) => { e.useHistory = ev.target.checked; markDirty(true); };
-  $('#runBtn').onclick = run;
+  $('#runBtn').onclick = openRunModal;
   $('#copyBtn').onclick = () => copyText(e.result);
   $('#editResultBtn').onclick = () => {
     if (e.editingResult) e.result = $('#resultEdit').value;
@@ -407,9 +400,67 @@ function renderEditor() {
     renderResult();
   };
   $('#saveBtn').onclick = () => saveEditor(false);
-  if (e.id) {
-    $('#delBtn').onclick = () => removeRecord(e.id);
-  }
+  if (e.id) $('#delBtn').onclick = () => removeRecord(e.id);
+}
+
+// ---------- 만들기 전 이론 선택 모달 (만들 때마다, 다시 만들 때도 항상 띄움) ----------
+function openRunModal() {
+  const e = editor;
+  if (!profile.geminiKey) { toast('먼저 설정에서 AI 이용 키를 등록해 주세요'); location.hash = '#/settings'; return; }
+  if (!buildPrompt().filledCount) return toast('내용을 하나 이상 입력해 주세요');
+  const prevCount = clientRecords(e.clientId).filter((r) => r.id !== e.id && r.result).length;
+  const opener = document.activeElement;
+  const back = document.createElement('div');
+  back.className = 'modal-back';
+  back.innerHTML = `
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+      <div class="modal-body">
+        <h3 id="mTitle">${TYPE[e.type]} ${e.result ? '다시 ' : ''}만들기</h3>
+        <p class="sub">적용할 이론을 고르세요. 하나도 고르지 않으면 이론 없이 입력 내용만으로 작성합니다.</p>
+        <div class="row" style="margin:-4px 0 6px"><button class="link-btn" data-all>모두 선택</button><button class="link-btn" data-none>모두 해제</button></div>
+        <div id="mLenses">${manifest.lenses.map((l) => `
+          <label class="lens">
+            <input type="checkbox" value="${l.id}" ${e.lenses.includes(l.id) ? 'checked' : ''}>
+            <span><span class="num">${l.id.slice(0, 2)}</span> <span class="t">${esc(l.title)}</span><div class="d">${esc(l.desc)}</div></span>
+          </label>`).join('')}</div>
+        <label class="check modal-hist">
+          <input type="checkbox" id="mHistory" ${e.useHistory && prevCount ? 'checked' : ''} ${prevCount ? '' : 'disabled'}>
+          <span>이 아동의 이전 기록 참고하기
+            <small>${prevCount ? `최근 기록 ${Math.min(prevCount, HISTORY_COUNT)}건을 함께 보내 변화와 반복되는 주제를 반영합니다` : '아직 참고할 이전 기록이 없습니다'}</small>
+          </span>
+        </label>
+        ${e.result ? '<p class="modal-note">지금 결과는 새 결과로 바뀝니다.</p>' : ''}
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" data-cancel>취소</button>
+        <button class="btn" data-go></button>
+      </div>
+    </div>`;
+  document.body.appendChild(back);
+  const boxes = () => [...back.querySelectorAll('#mLenses input')];
+  const goBtn = back.querySelector('[data-go]');
+  const sync = () => {
+    const n = boxes().filter((b) => b.checked).length;
+    goBtn.textContent = n ? `이론 ${n}개 적용해 만들기` : '이론 없이 만들기';
+  };
+  const close = () => { document.removeEventListener('keydown', onKey); back.remove(); opener?.focus?.(); };
+  const onKey = (ev) => { if (ev.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  back.onclick = (ev) => { if (ev.target === back) close(); };
+  back.querySelector('#mLenses').onchange = sync;
+  back.querySelector('[data-all]').onclick = () => { boxes().forEach((b) => (b.checked = true)); sync(); };
+  back.querySelector('[data-none]').onclick = () => { boxes().forEach((b) => (b.checked = false)); sync(); };
+  back.querySelector('[data-cancel]').onclick = close;
+  goBtn.onclick = () => {
+    e.lenses = boxes().filter((b) => b.checked).map((b) => b.value);
+    prefs['lenses_' + e.type] = e.lenses; savePrefs(prefs);
+    if (prevCount) e.useHistory = back.querySelector('#mHistory').checked;
+    markDirty(true);
+    close();
+    run();
+  };
+  sync();
+  goBtn.focus();
 }
 
 function renderResult() {
@@ -631,7 +682,6 @@ async function run() {
   if (!profile.geminiKey) { toast('먼저 설정에서 AI 이용 키를 등록해 주세요'); location.hash = '#/settings'; return; }
   const prompt = buildPrompt();
   if (!prompt.filledCount) return toast('내용을 하나 이상 입력해 주세요');
-  if (e.result && !confirm('지금 결과를 새 결과로 바꿀까요?')) return;
 
   running?.abort();
   const ctrl = new AbortController(); running = ctrl;
