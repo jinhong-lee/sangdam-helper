@@ -43,7 +43,7 @@ const prefs = loadPrefs();
 
 const userCol = (name) => collection(db, 'users', user.uid, name);
 const userDoc = (name, id) => doc(db, 'users', user.uid, name, id);
-const clientName = (id) => clients.find((c) => c.id === id)?.name || '(삭제된 아동)';
+const clientName = (id) => clients.find((c) => c.id === id)?.name || '(삭제된 내담자)';
 const clientRecords = (id) => records.filter((r) => r.clientId === id);
 
 // ---------- 시작 ----------
@@ -168,7 +168,7 @@ function route() {
   window.scrollTo(0, 0);
 }
 
-const navToggled = new Map(); // 아동별로 사용자가 직접 펼침/접음을 바꾼 상태
+const navToggled = new Map(); // 내담자별로 사용자가 직접 펼침/접음을 바꾼 상태
 let navQuery = '';
 // 검색: 이미 불러온 목록 안에서만 찾음 → 서버 조회 없음(무료 사용량 소모 없음)
 function hl(text, q) {
@@ -212,7 +212,7 @@ function renderNav() {
   });
 }
 
-// 아동 추가 (왼쪽 메뉴 맨 위)
+// 내담자 추가 (왼쪽 메뉴 맨 위)
 $('#navAddClient').onclick = addClient;
 
 // 검색창
@@ -236,8 +236,8 @@ $('#nav').addEventListener('mouseover', (ev) => {
 $('#nav').addEventListener('mouseleave', () => { navTip.hidden = true; });
 window.addEventListener('scroll', () => { navTip.hidden = true; }, { passive: true });
 
-// ---------- 아동 ----------
-// 아동 별칭 입력 모달 (추가·이름 바꾸기 공용)
+// ---------- 내담자 ----------
+// 내담자 별칭 입력 모달 (추가·이름 바꾸기 공용)
 function nameModal({ title, okLabel, value = '', exceptId = null }) {
   return new Promise((resolve) => {
     const opener = document.activeElement;
@@ -266,7 +266,7 @@ function nameModal({ title, okLabel, value = '', exceptId = null }) {
     const check = () => {
       const v = input.value.trim();
       const dup = v && clients.some((c) => c.name === v && c.id !== exceptId);
-      err.hidden = !dup; err.textContent = dup ? '같은 이름의 아동이 이미 있습니다. 다른 별칭을 써주세요.' : '';
+      err.hidden = !dup; err.textContent = dup ? '같은 이름의 내담자가 이미 있습니다. 다른 별칭을 써주세요.' : '';
       input.classList.toggle('invalid', !!dup);
       ok.disabled = !v || dup || v === value;
       return !ok.disabled;
@@ -286,7 +286,7 @@ function nameModal({ title, okLabel, value = '', exceptId = null }) {
 }
 
 async function addClient() {
-  const name = await nameModal({ title: '아동 추가', okLabel: '추가' });
+  const name = await nameModal({ title: '내담자 추가', okLabel: '추가' });
   if (!name) return;
   const data = { name, memo: '', createdAt: Date.now(), updatedAt: Date.now() };
   const ref = await addDoc(userCol('clients'), data);
@@ -303,10 +303,10 @@ function viewClient(id) {
       <div class="name-row">
         <h2>${esc(c.name)}</h2>
         <div class="more">
-          <button class="more-btn" id="moreBtn" aria-haspopup="menu" aria-expanded="false" aria-label="아동 관리 메뉴">⋯</button>
+          <button class="more-btn" id="moreBtn" aria-haspopup="menu" aria-expanded="false" aria-label="내담자 관리 메뉴">⋯</button>
           <div class="more-menu" id="moreMenu" role="menu" hidden>
             <button role="menuitem" id="renameBtn">이름 바꾸기</button>
-            <button role="menuitem" class="danger" id="delClientBtn">아동 삭제</button>
+            <button role="menuitem" class="danger" id="delClientBtn">내담자 삭제</button>
           </div>
         </div>
       </div>
@@ -317,8 +317,8 @@ function viewClient(id) {
     </div>
     <div class="stack">
       <div class="card">
-        <h3>아동 메모</h3>
-        <p class="sub">이 아동에 대해 기억해 둘 내용 (다른 사람은 볼 수 없습니다)</p>
+        <h3>내담자 메모</h3>
+        <p class="sub">이 내담자에 대해 기억해 둘 내용 (다른 사람은 볼 수 없습니다)</p>
         <textarea id="memo" placeholder="예) 2026년 9월 의뢰, 주 1회, 모 상담 격주">${esc(c.memo)}</textarea>
       </div>
       ${listHTML(list, false)}
@@ -327,7 +327,7 @@ function viewClient(id) {
     if (e.target.value === c.memo) return;
     c.memo = e.target.value; c.updatedAt = Date.now();
     await updateDoc(userDoc('clients', id), { memo: c.memo, updatedAt: c.updatedAt });
-    toast('아동 메모를 저장했습니다');
+    toast('내담자 메모를 저장했습니다');
   };
   $('#moreBtn').onclick = () => toggleMenu($('#moreBtn'));
   const closeMenu = closeMenus;
@@ -342,7 +342,7 @@ function viewClient(id) {
   };
   $('#delClientBtn').onclick = async () => {
     closeMenu();
-    if (!(await confirmDelete('아동 삭제', `"${c.name}"와 이 아동의 기록 ${list.length}건을 모두 삭제합니다.`))) return;
+    if (!(await confirmDelete('내담자 삭제', `"${c.name}"와 이 내담자의 기록 ${list.length}건을 모두 삭제합니다.`))) return;
     const batch = writeBatch(db);
     list.forEach((r) => batch.delete(userDoc('records', r.id)));
     batch.delete(userDoc('clients', id));
@@ -359,9 +359,9 @@ function viewHome() {
   if (!clients.length) {
     $('#main').innerHTML = `
       <div class="card empty">
-        <b>첫 아동을 추가해 주세요</b>
-        아동별로 상담일지와 사례 분석을 모아서 관리합니다.<br>이름 대신 "A-1"처럼 나만 알아볼 수 있는 별칭을 쓰세요.
-        <div style="margin-top:18px"><button class="btn" id="firstClient">+ 아동 추가</button></div>
+        <b>첫 내담자를 추가해 주세요</b>
+        내담자별로 상담일지와 사례 분석을 모아서 관리합니다.<br>이름 대신 "A-1"처럼 나만 알아볼 수 있는 별칭을 쓰세요.
+        <div style="margin-top:18px"><button class="btn" id="firstClient">+ 내담자 추가</button></div>
         ${profile.geminiKey ? '' : '<p class="sub" style="margin:18px 0 0">AI 이용 키도 등록해야 합니다. <a href="#/settings">설정으로 가기</a></p>'}
       </div>`;
     $('#firstClient').onclick = addClient;
@@ -373,8 +373,8 @@ function viewHome() {
     ${records.length ? listHTML(records, true) : `
       <div class="card empty">
         <b>아직 기록이 없습니다</b>
-        왼쪽에서 아동을 골라 첫 기록을 만들거나, 새 아동을 추가해 보세요.
-        <div style="margin-top:18px"><button class="btn ghost" id="emptyAddClient">+ 아동 추가</button></div>
+        왼쪽에서 내담자를 골라 첫 기록을 만들거나, 새 내담자를 추가해 보세요.
+        <div style="margin-top:18px"><button class="btn ghost" id="emptyAddClient">+ 내담자 추가</button></div>
       </div>`}`;
   $('#emptyAddClient')?.addEventListener('click', addClient);
   bindList();
@@ -681,7 +681,7 @@ function renderBulk(host, clientId, { text, onBack, onSaved, excludeId, autoGen 
       prog('저장하지 못했습니다: ' + friendlyError(err));
     }
     busy = false;
-    box.querySelector('.bulk-actions').insertAdjacentHTML('beforeend', '<button class="btn" id="iDone">아동 화면으로</button>');
+    box.querySelector('.bulk-actions').insertAdjacentHTML('beforeend', '<button class="btn" id="iDone">내담자 화면으로</button>');
     box.querySelector('#iStop')?.remove();
     box.querySelector('#iDone').onclick = () => { location.hash = '#/c/' + clientId; };
     await onSaved?.();
@@ -703,9 +703,9 @@ function exportRecords(kind) {
     type = 'application/json';
   } else {
     const line = '='.repeat(40);
-    body = `농지 도우미 기록 · ${nowStamp()} 내보냄\n아동 ${clients.length}명 · 기록 ${records.length}건\n`;
+    body = `농지 도우미 기록 · ${nowStamp()} 내보냄\n내담자 ${clients.length}명 · 기록 ${records.length}건\n`;
     clients.forEach((c) => {
-      body += `\n${line}\n[아동] ${c.name}\n${c.memo ? '아동 메모: ' + c.memo + '\n' : ''}${line}\n`;
+      body += `\n${line}\n[내담자] ${c.name}\n${c.memo ? '내담자 메모: ' + c.memo + '\n' : ''}${line}\n`;
       clientRecords(c.id).slice().sort((a, b) => a.createdAt - b.createdAt).forEach((r) => {
         body += `\n▶ [${TYPE[r.type]}] ${r.title} (작성 ${fmtDate(r.createdAt)})\n\n■ 입력 내용\n`;
         Object.entries(r.inputs || {}).filter(([, v]) => (v || '').trim()).forEach(([k, v]) => { body += `- ${k}: ${v.trim()}\n`; });
@@ -815,6 +815,7 @@ function defaultTitle(clientId, type) {
 const MODES = { sentence: '문장으로 쓰기', fields: '항목별로 쓰기' };
 const freeField = (type) => manifest.fields[type].find((f) => f.free);
 const modeFields = (type, mode) => manifest.fields[type].filter((f) => (mode === 'sentence' ? f.free : !f.free));
+const FIELD_RENAMES = { '아동의 말': '내담자의 말' };   // 바뀐 칸 이름 → 예전 기록도 새 이름으로 보이게
 const OLD_FREE = { journal: ['회기 메모', '오늘 회기 내용'], analysis: ['사례 메모'] };   // 예전 칸 이름 → 새 이름으로 옮김
 function inferMode(src) {
   if (src.mode) return src.mode;
@@ -838,6 +839,7 @@ function openEditor(src) {
       const inp = { ...(src.inputs || {}) };
       const newK = freeField(type)?.label;
       (OLD_FREE[type] || []).forEach((oldK) => { if (newK && inp[oldK] && !inp[newK]) inp[newK] = inp[oldK]; delete inp[oldK]; });
+      Object.entries(FIELD_RENAMES).forEach(([o, n]) => { if (inp[o] != null && inp[n] == null) inp[n] = inp[o]; delete inp[o]; });
       return inp;
     })(),
     mode: null,
@@ -873,7 +875,7 @@ function renderEditorBody() {
   const autoTitle = sentence && e.type === 'journal';   // 상담일지 문장 쓰기는 제목을 내용 첫 줄(N회기·날짜)에서 자동으로 만듦
   host.innerHTML = `
     <p class="sub">${sentence
-      ? (e.type === 'journal' ? '회기마다 첫 줄에 "N회기 날짜 시간"을 적고 내용을 이어서 쓰세요. 지난 회기까지 여러 개를 한꺼번에 넣으면 회기별 상담일지로 나눠 저장됩니다.' : '아동과 사례에 대해 아는 내용을 편하게 문장으로 적으세요. AI가 항목별로 나눠 분석합니다.')
+      ? (e.type === 'journal' ? '회기마다 첫 줄에 "N회기 날짜 시간"을 적고 내용을 이어서 쓰세요. 지난 회기까지 여러 개를 한꺼번에 넣으면 회기별 상담일지로 나눠 저장됩니다.' : '내담자와 사례에 대해 아는 내용을 편하게 문장으로 적으세요. AI가 항목별로 나눠 분석합니다.')
       : '아는 항목만 키워드나 짧은 문장으로 적으세요. 빈 칸은 건너뜁니다.'}</p>
     ${autoTitle ? '' : `<div class="field">
       <label for="title">제목</label>
@@ -1081,7 +1083,7 @@ async function openRunModal() {
           </label>`).join('')}</div>
         <label class="check modal-hist">
           <input type="checkbox" id="mHistory" ${e.useHistory && prevCount ? 'checked' : ''} ${prevCount ? '' : 'disabled'}>
-          <span>이 아동의 이전 기록 참고하기
+          <span>이 내담자의 이전 기록 참고하기
             <small>${prevCount ? `최근 기록 ${Math.min(prevCount, HISTORY_COUNT)}건을 함께 보내 변화와 반복되는 주제를 반영합니다` : '아직 참고할 이전 기록이 없습니다'}</small>
           </span>
         </label>
@@ -1211,12 +1213,12 @@ function buildPrompt(e = editor) {
       .slice(0, HISTORY_COUNT)
       .reverse();
     if (prev.length) {
-      out += sep + `# [이전 기록] 같은 아동의 최근 기록 ${prev.length}건 (오래된 순)\n\n이전 기록과 비교해 **변화, 반복되는 주제, 연속성**을 반영하십시오. 이전 기록과 이번 입력 정보가 다르면 이번 입력 정보를 우선하십시오.\n\n`
+      out += sep + `# [이전 기록] 같은 내담자의 최근 기록 ${prev.length}건 (오래된 순)\n\n이전 기록과 비교해 **변화, 반복되는 주제, 연속성**을 반영하십시오. 이전 기록과 이번 입력 정보가 다르면 이번 입력 정보를 우선하십시오.\n\n`
         + prev.map((r) => `## ${TYPE[r.type]} · ${r.title} · ${fmtDay(r.createdAt)}\n\n${r.result.slice(0, 4000)}`).join('\n\n');
     }
   }
 
-  out += sep + `# [입력 정보]\n\n아동: ${clientName(e.clientId)}\n기록: ${e.title}\n\n` + filled.map(([k, v]) => `## ${k}\n${v}`).join('\n\n');
+  out += sep + `# [입력 정보]\n\n내담자: ${clientName(e.clientId)}\n기록: ${e.title}\n\n` + filled.map(([k, v]) => `## ${k}\n${v}`).join('\n\n');
   out += sep + `${lenses.length ? '[참고자료]의 이론을 순서대로 빠짐없이 적용해 ' : ''}[출력 양식]에 맞춰 ${task}을 해주십시오. 답변은 한국어 마크다운으로 작성하십시오.`;
   return { system: docs[manifest.role.id], user: out, filledCount: filled.length };
 }
@@ -1454,7 +1456,7 @@ function viewSettings() {
       </div>
       <div class="card">
         <h3>기록 내보내기</h3>
-        <p class="sub">내 아동과 기록 전체를 파일로 저장합니다. 정기적으로 받아두면 실수로 지웠을 때도 내용을 보관할 수 있어요.</p>
+        <p class="sub">내 내담자와 기록 전체를 파일로 저장합니다. 정기적으로 받아두면 실수로 지웠을 때도 내용을 보관할 수 있어요.</p>
         <div class="row">
           <button class="btn small" id="exportTxt">읽기용 파일(.txt) 받기</button>
           <button class="btn ghost small" id="exportJson">백업용 파일(.json) 받기</button>
@@ -1462,7 +1464,7 @@ function viewSettings() {
       </div>
       <div class="card">
         <h3>계정</h3>
-        <p class="sub">${esc(user.email || '')} 으로 로그인되어 있습니다. 아동 ${clients.length}명, 기록 ${records.length}건</p>
+        <p class="sub">${esc(user.email || '')} 으로 로그인되어 있습니다. 내담자 ${clients.length}명, 기록 ${records.length}건</p>
       </div>
     </div>`;
 
