@@ -148,6 +148,18 @@
   .modal-hist { margin-top: 10px; padding-top: 14px; border-top: 1px solid var(--border); }
   .modal-note { font-size: 13px; color: var(--accent); margin: 12px 0 0; }
   .modal-sm { max-width: 420px; }
+  .field-error { margin: 6px 0 0; font-size: 12.5px; color: var(--error); }
+  input.invalid, input.invalid:focus { outline: 2px solid var(--error); outline-offset: -1px; }
+  .name-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
+  .name-row h2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .more { position: relative; }
+  .more-btn { width: 32px; height: 32px; border: 0; border-radius: 8px; background: none; color: var(--text-2); font-size: 20px; line-height: 1; cursor: pointer; }
+  .more-btn:hover, .more-btn[aria-expanded="true"] { background: var(--surface-2); color: var(--text); }
+  .more-menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 50; min-width: 140px; padding: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.12); display: grid; }
+  .more-menu[hidden] { display: none; }
+  .more-menu button { text-align: left; padding: 8px 10px; border: 0; border-radius: 8px; background: none; font: inherit; font-size: 14px; color: var(--text); cursor: pointer; }
+  .more-menu button:hover, .more-menu button:focus-visible { background: var(--surface-2); outline: none; }
+  .more-menu button.danger { color: var(--error); }
   .del-label { display: block; font-size: 13px; color: var(--text-2); margin-bottom: 6px; }
   .btn.btn-delete { background: var(--error); color: #fff; }
   .btn.btn-delete:hover:not(:disabled) { filter: brightness(1.08); }
@@ -164,6 +176,8 @@
   .btn:disabled { opacity: .5; cursor: default; }
   .btn.block { width: 100%; }
   .btn.ghost { background: var(--surface-2); color: var(--text); }
+  .btn.soft { background: var(--primary-soft); color: var(--primary); }
+  .btn.soft:hover { background: var(--primary); color: var(--on-primary); }
   .btn.ghost:hover { background: var(--border); }
   .btn.danger { background: transparent; color: var(--error); }
   .btn.danger:hover { background: var(--surface-2); }

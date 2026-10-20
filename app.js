@@ -216,10 +216,57 @@ $('#nav').addEventListener('mouseleave', () => { navTip.hidden = true; });
 window.addEventListener('scroll', () => { navTip.hidden = true; }, { passive: true });
 
 // ---------- 아동 ----------
+// 아동 별칭 입력 모달 (추가·이름 바꾸기 공용)
+function nameModal({ title, okLabel, value = '', exceptId = null }) {
+  return new Promise((resolve) => {
+    const opener = document.activeElement;
+    const back = document.createElement('div');
+    back.className = 'modal-back';
+    back.innerHTML = `
+      <div class="modal modal-sm" role="dialog" aria-modal="true" aria-labelledby="nTitle">
+        <div class="modal-body">
+          <h3 id="nTitle">${esc(title)}</h3>
+          <p class="sub">실명 대신 "A-1"처럼 나만 알아볼 수 있는 별칭을 써주세요.</p>
+          <div class="field" style="margin:0">
+            <label for="nInput">별칭</label>
+            <input type="text" id="nInput" autocomplete="off" maxlength="30" value="${esc(value)}" placeholder="예) A-1">
+            <p class="field-error" id="nError" hidden></p>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn ghost" data-cancel>취소</button>
+          <button class="btn" data-ok disabled>${esc(okLabel)}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(back);
+    const input = back.querySelector('#nInput');
+    const ok = back.querySelector('[data-ok]');
+    const err = back.querySelector('#nError');
+    const check = () => {
+      const v = input.value.trim();
+      const dup = v && clients.some((c) => c.name === v && c.id !== exceptId);
+      err.hidden = !dup; err.textContent = dup ? '같은 이름의 아동이 이미 있습니다. 다른 별칭을 써주세요.' : '';
+      input.classList.toggle('invalid', !!dup);
+      ok.disabled = !v || dup || v === value;
+      return !ok.disabled;
+    };
+    const done = (v) => { document.removeEventListener('keydown', onKey); back.remove(); opener?.focus?.(); resolve(v); };
+    const onKey = (ev) => { if (ev.key === 'Escape') done(null); };
+    document.addEventListener('keydown', onKey);
+    input.oninput = check;
+    // 한글 조합 중 Enter 대응: keyup에서 확인
+    input.onkeyup = (ev) => { if (ev.key === 'Enter' && !ev.isComposing && check()) done(input.value.trim()); };
+    ok.onclick = () => { if (check()) done(input.value.trim()); };
+    back.querySelector('[data-cancel]').onclick = () => done(null);
+    back.onclick = (ev) => { if (ev.target === back) done(null); };
+    check();
+    input.focus(); input.select();
+  });
+}
+
 async function addClient() {
-  const name = (prompt('아동 별칭을 입력하세요 (예: A-1)') || '').trim();
+  const name = await nameModal({ title: '아동 추가', okLabel: '추가' });
   if (!name) return;
-  if (clients.some((c) => c.name === name)) return toast('같은 이름의 아동이 이미 있습니다');
   const data = { name, memo: '', createdAt: Date.now(), updatedAt: Date.now() };
   const ref = await addDoc(userCol('clients'), data);
   clients.push({ id: ref.id, ...data });
@@ -231,11 +278,20 @@ function viewClient(id) {
   const c = clients.find((x) => x.id === id);
   const list = clientRecords(id);
   $('#main').innerHTML = `
-    <div class="page-head">
-      <div><div class="eyebrow">아동</div><h2>${esc(c.name)}</h2></div>
+    <div class="page-head" style="align-items:center">
+      <div class="name-row">
+        <h2>${esc(c.name)}</h2>
+        <div class="more">
+          <button class="more-btn" id="moreBtn" aria-haspopup="menu" aria-expanded="false" aria-label="아동 관리 메뉴">⋯</button>
+          <div class="more-menu" id="moreMenu" role="menu" hidden>
+            <button role="menuitem" id="renameBtn">이름 바꾸기</button>
+            <button role="menuitem" class="danger" id="delClientBtn">아동 삭제</button>
+          </div>
+        </div>
+      </div>
       <div class="row">
-        <button class="btn ghost small" id="renameBtn">이름 바꾸기</button>
-        <button class="btn danger small" id="delClientBtn">아동 삭제</button>
+        <a class="btn soft" href="#/new/${id}/journal">+ 상담일지</a>
+        <a class="btn soft" href="#/new/${id}/analysis">+ 사례 분석</a>
       </div>
     </div>
     <div class="stack">
@@ -243,10 +299,6 @@ function viewClient(id) {
         <h3>메모</h3>
         <p class="sub">이 아동에 대해 기억해 둘 내용 (다른 사람은 볼 수 없습니다)</p>
         <textarea id="memo" placeholder="예) 2026년 9월 의뢰, 주 1회, 모 상담 격주">${esc(c.memo)}</textarea>
-      </div>
-      <div class="row">
-        <a class="btn" href="#/new/${id}/journal">+ 새 상담일지</a>
-        <a class="btn ghost" href="#/new/${id}/analysis">+ 새 사례 분석</a>
       </div>
       ${listHTML(list, false)}
     </div>`;
@@ -256,15 +308,28 @@ function viewClient(id) {
     await updateDoc(userDoc('clients', id), { memo: c.memo, updatedAt: c.updatedAt });
     toast('메모를 저장했습니다');
   };
+  // ⋯ 메뉴
+  const moreBtn = $('#moreBtn'), moreMenu = $('#moreMenu');
+  const closeMenu = () => { moreMenu.hidden = true; moreBtn.setAttribute('aria-expanded', 'false'); document.removeEventListener('click', outside); document.removeEventListener('keydown', escMenu); };
+  const outside = (ev) => { if (!ev.target.closest('.more')) closeMenu(); };
+  const escMenu = (ev) => { if (ev.key === 'Escape') { closeMenu(); moreBtn.focus(); } };
+  moreBtn.onclick = () => {
+    if (!moreMenu.hidden) return closeMenu();
+    moreMenu.hidden = false; moreBtn.setAttribute('aria-expanded', 'true');
+    moreMenu.querySelector('button').focus();
+    setTimeout(() => { document.addEventListener('click', outside); document.addEventListener('keydown', escMenu); });
+  };
   $('#renameBtn').onclick = async () => {
-    const name = (prompt('새 별칭', c.name) || '').trim();
-    if (!name || name === c.name) return;
+    closeMenu();
+    const name = await nameModal({ title: '이름 바꾸기', okLabel: '바꾸기', value: c.name, exceptId: c.id });
+    if (!name) return;
     c.name = name;
     await updateDoc(userDoc('clients', id), { name, updatedAt: Date.now() });
     clients.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
     viewClient(id); renderNav();
   };
   $('#delClientBtn').onclick = async () => {
+    closeMenu();
     if (!(await confirmDelete('아동 삭제', `"${c.name}"와 이 아동의 기록 ${list.length}건을 모두 삭제합니다.`))) return;
     const batch = writeBatch(db);
     list.forEach((r) => batch.delete(userDoc('records', r.id)));
@@ -305,7 +370,7 @@ function viewHome() {
 
 // ---------- 기록 목록 ----------
 function listHTML(list, showClient) {
-  if (!list.length) return '<div class="card empty"><b>아직 기록이 없습니다</b>위 버튼으로 첫 기록을 만들어 보세요.</div>';
+  if (!list.length) return '<div class="card empty"><b>아직 기록이 없습니다</b>오른쪽 위 [+ 상담일지] 또는 [+ 사례 분석]으로 첫 기록을 만들어 보세요.</div>';
   return `<div class="list">${list.map((r) => `
     <div class="item" data-open="${r.id}">
       <div class="item-body">
