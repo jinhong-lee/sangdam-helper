@@ -300,12 +300,11 @@ function viewClient(id) {
       <div class="row">
         <a class="btn soft h32" href="#/new/${id}/journal">+ 상담일지</a>
         <a class="btn soft h32" href="#/new/${id}/analysis">+ 사례 분석</a>
-        <button class="btn ghost h32" id="importBtn">회기 메모 가져오기</button>
       </div>
     </div>
     <div class="stack">
       <div class="card">
-        <h3>메모</h3>
+        <h3>아동 메모</h3>
         <p class="sub">이 아동에 대해 기억해 둘 내용 (다른 사람은 볼 수 없습니다)</p>
         <textarea id="memo" placeholder="예) 2026년 9월 의뢰, 주 1회, 모 상담 격주">${esc(c.memo)}</textarea>
       </div>
@@ -315,10 +314,9 @@ function viewClient(id) {
     if (e.target.value === c.memo) return;
     c.memo = e.target.value; c.updatedAt = Date.now();
     await updateDoc(userDoc('clients', id), { memo: c.memo, updatedAt: c.updatedAt });
-    toast('메모를 저장했습니다');
+    toast('아동 메모를 저장했습니다');
   };
   $('#moreBtn').onclick = () => toggleMenu($('#moreBtn'));
-  $('#importBtn').onclick = () => openImport(id);
   const closeMenu = closeMenus;
   $('#renameBtn').onclick = async () => {
     closeMenu();
@@ -431,8 +429,8 @@ async function duplicate(id) {
   location.hash = '#/r/' + ref.id;
 }
 
-// ---------- 회기 메모 한꺼번에 가져오기 ----------
-const MEMO_FIELD = '회기 메모';
+// ---------- 여러 회기 한꺼번에 쓰기 ----------
+const freeLabel = () => freeField('journal').label;
 // "3회기 10월 3일 오후 4시" 같은 머리줄에서 회기 번호·날짜·시간을 읽음
 const HEADER_RE = /^\s*[\[(#*\-•▶]*\s*(?:(\d{1,3})\s*회기|회기\s*(\d{1,3}))/;
 function parseHeader(line) {
@@ -465,7 +463,7 @@ function stampOf(ts, withTime) {
   return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}` + (withTime ? ` ${p2(d.getHours())}:${p2(d.getMinutes())}` : '');
 }
 function sessionTitle(n, ts, hasTime) {
-  return [n ? `${n}회기` : '', ts ? stampOf(ts, hasTime) : ''].filter(Boolean).join(' · ') || '회기 메모';
+  return [n ? `${n}회기` : '', ts ? stampOf(ts, hasTime) : ''].filter(Boolean).join(' · ') || '상담일지';
 }
 function splitByRule(text) {
   const lines = text.replace(/\r/g, '').split('\n');
@@ -508,8 +506,8 @@ async function aiJSON(system, user, signal) {
 }
 async function splitByAI(text, signal) {
   const arr = await aiJSON(
-    '너는 상담 메모를 회기별로 나누는 도우미다. 반드시 JSON 배열만 출력한다.',
-    `아래 메모를 회기(상담 1회) 단위로 나눠라.\n- 각 항목: {"session": 회기 번호(숫자, 없으면 null), "date": "YYYY-MM-DD" 또는 null, "time": "HH:MM"(24시간) 또는 null, "content": 그 회기의 내용}\n- content는 원문 그대로 옮기고 요약하거나 고치지 마라. 머리줄(회기·날짜·시간)은 content에서 뺀다.\n- 연도가 없으면 ${new Date().getFullYear()}년으로 본다.\n\n[메모]\n${text}`,
+    '너는 상담 기록을 회기별로 나누는 도우미다. 반드시 JSON 배열만 출력한다.',
+    `아래 글을 회기(상담 1회) 단위로 나눠라.\n- 각 항목: {"session": 회기 번호(숫자, 없으면 null), "date": "YYYY-MM-DD" 또는 null, "time": "HH:MM"(24시간) 또는 null, "content": 그 회기의 내용}\n- content는 원문 그대로 옮기고 요약하거나 고치지 마라. 머리줄(회기·날짜·시간)은 content에서 뺀다.\n- 연도가 없으면 ${new Date().getFullYear()}년으로 본다.\n\n[글]\n${text}`,
     signal,
   );
   return (Array.isArray(arr) ? arr : []).map((x) => {
@@ -538,41 +536,29 @@ async function generateText(prompt, signal) {
   throw lastErr;
 }
 
-function openImport(clientId) {
-  const opener = document.activeElement;
+function renderBulk(host, clientId) {
   const lensIds = prefs.lenses_journal || manifest.lenses.filter((l) => l.journal).map((l) => l.id);
   const lensNames = manifest.lenses.filter((l) => lensIds.includes(l.id)).map((l) => l.title);
   let sessions = [], busy = false, ctrl = null;
-  const back = document.createElement('div');
-  back.className = 'modal-back';
-  back.innerHTML = `<div class="modal modal-lg" role="dialog" aria-modal="true" aria-labelledby="iTitle"></div>`;
-  document.body.appendChild(back);
-  const box = back.querySelector('.modal');
-  const close = () => { if (busy) return; document.removeEventListener('keydown', onKey); back.remove(); opener?.focus?.(); };
-  const onKey = (ev) => { if (ev.key === 'Escape') close(); };
-  document.addEventListener('keydown', onKey);
-  back.onclick = (ev) => { if (ev.target === back) close(); };
+  const box = host;
 
   // 1단계: 붙여넣기
   const step1 = (text = '') => {
     box.innerHTML = `
-      <div class="modal-body">
-        <h3 id="iTitle">회기 메모 가져오기</h3>
-        <p class="sub">메모장이나 한글 파일에 적어둔 여러 회기를 한꺼번에 붙여넣으세요. 회기마다 상담일지 기록이 하나씩 만들어집니다.</p>
+      <div>
+        <p class="sub">여러 회기를 한 번에 적거나, 메모장·한글 파일에 적어둔 내용을 붙여넣으세요. 회기마다 상담일지가 하나씩 만들어집니다.</p>
         <textarea id="iText" rows="12" placeholder="1회기 10월 3일 오후 4시&#10;클레이 처음 만짐, 손끝만 대다가 점점 손바닥 전체&#10;&#10;2회기 10월 10일 오후 4시&#10;모래상자에 울타리 여러 겹, '괴물이 못 들어와'">${esc(text)}</textarea>
-        <p class="hint-line">각 회기 첫 줄은 <b>"N회기"</b>로 시작해 주세요. 날짜·시간은 같은 줄에 적으면 자동으로 읽습니다. <label class="link-btn file-link">메모장 파일(.txt) 불러오기<input type="file" id="iFile" accept=".txt,text/plain" hidden></label></p>
+        <p class="hint-line">각 회기 첫 줄은 <b>"N회기"</b>로 시작해 주세요. 날짜·시간은 같은 줄에 적으면 자동으로 읽습니다. <label class="link-btn file-link">텍스트 파일(.txt) 불러오기<input type="file" id="iFile" accept=".txt,text/plain" hidden></label></p>
         <div class="error-box" id="iErr" hidden></div>
       </div>
-      <div class="modal-actions">
-        <button class="btn ghost" data-cancel>취소</button>
+      <div class="bulk-actions">
         <button class="btn" id="iSplit">회기별로 나누기</button>
       </div>`;
     const ta = box.querySelector('#iText');
-    box.querySelector('[data-cancel]').onclick = close;
     box.querySelector('#iFile').onchange = async (ev) => { const f = ev.target.files[0]; if (f) ta.value = await f.text(); };
     box.querySelector('#iSplit').onclick = () => {
       const t = ta.value.trim();
-      if (!t) return showErr('메모를 붙여넣어 주세요.');
+      if (!t) return showErr('내용을 적거나 붙여넣어 주세요.');
       const r = splitByRule(t);
       if (!r.sessions.length) return showErr('"N회기"로 시작하는 줄을 찾지 못했어요. 형식이 다르면 아래 [AI로 나누기]를 눌러주세요.', t);
       sessions = r.sessions; step2(t, r.before);
@@ -588,8 +574,7 @@ function openImport(clientId) {
   const runAISplit = async (text) => {
     if (!profile.geminiKey) { toast('AI로 나누려면 설정에서 AI 이용 키를 먼저 등록해 주세요'); return; }
     busy = true; ctrl = new AbortController();
-    box.innerHTML = `<div class="modal-body"><h3 id="iTitle">회기 메모 가져오기</h3>
-      <div class="status"><span class="spinner"></span>AI가 회기별로 나누고 있어요. 10~30초 정도 걸려요.</div></div>`;
+    box.innerHTML = `<div class="status"><span class="spinner"></span>AI가 회기별로 나누고 있어요. 10~30초 정도 걸려요.</div>`;
     try {
       sessions = await splitByAI(text, ctrl.signal);
       busy = false;
@@ -602,15 +587,15 @@ function openImport(clientId) {
   const step2 = (text, before, byAI) => {
     const existing = clientRecords(clientId).filter((r) => r.type === 'journal').map((r) => (r.title.match(/^(\d+)회기/) || [])[1]).filter(Boolean);
     box.innerHTML = `
-      <div class="modal-body">
-        <h3 id="iTitle">${sessions.length}개 회기로 나눴어요</h3>
-        <p class="sub">제목과 내용을 확인하고 고칠 수 있어요. 가져오지 않을 회기는 체크를 해제하세요.${byAI ? ' (AI가 나눈 결과입니다)' : ''}</p>
-        ${before ? `<p class="hint-line warn">첫 "N회기" 줄 앞에 있던 ${before}줄은 가져오지 않습니다.</p>` : ''}
+      <div>
+        <h3 class="bulk-title">${sessions.length}개 회기로 나눴어요</h3>
+        <p class="sub">제목과 내용을 확인하고 고칠 수 있어요. 저장하지 않을 회기는 체크를 해제하세요.${byAI ? ' (AI가 나눈 결과입니다)' : ''}</p>
+        ${before ? `<p class="hint-line warn">첫 "N회기" 줄 앞에 있던 ${before}줄은 저장하지 않습니다.</p>` : ''}
         <div class="imp-list">${sessions.map((s, i) => {
           const n = (s.title.match(/^(\d+)회기/) || [])[1];
           const dup = n && existing.includes(n);
           return `<div class="imp-row" data-i="${i}">
-            <input type="checkbox" class="imp-check" ${dup ? '' : 'checked'} aria-label="이 회기 가져오기">
+            <input type="checkbox" class="imp-check" ${dup ? '' : 'checked'} aria-label="이 회기 저장">
             <div class="imp-main">
               <input type="text" class="imp-title" value="${esc(s.title)}" aria-label="제목">
               <textarea class="imp-body" rows="3" aria-label="내용">${esc(s.content)}</textarea>
@@ -621,13 +606,13 @@ function openImport(clientId) {
         }).join('')}</div>
         <label class="check modal-hist">
           <input type="checkbox" id="iAuto" ${profile.geminiKey ? '' : 'disabled'}>
-          <span>가져온 뒤 상담일지까지 자동으로 만들기
+          <span>저장하고 상담일지 내용까지 AI로 만들기
             <small>${profile.geminiKey ? `회기당 30초~1분 걸려요. 적용 이론: ${lensNames.length ? esc(lensNames.join(', ')) : '없음'} (마지막으로 고른 설정)` : '설정에서 AI 이용 키를 등록하면 쓸 수 있어요'}</small>
           </span>
         </label>
       </div>
-      <div class="modal-actions">
-        <button class="btn ghost" id="iBack">다시 붙여넣기</button>
+      <div class="bulk-actions">
+        <button class="btn ghost" id="iBack">다시 쓰기</button>
         <button class="btn" id="iGo"></button>
       </div>`;
     const rows = () => [...box.querySelectorAll('.imp-row')];
@@ -636,7 +621,7 @@ function openImport(clientId) {
       const auto = box.querySelector('#iAuto').checked;
       const go = box.querySelector('#iGo');
       go.disabled = !n;
-      go.textContent = n ? (auto ? `${n}개 가져와서 일지까지 만들기` : `${n}개 기록으로 가져오기`) : '가져올 회기를 선택하세요';
+      go.textContent = n ? (auto ? `상담일지 ${n}개 저장하고 내용까지 만들기` : `상담일지 ${n}개로 저장`) : '저장할 회기를 선택하세요';
     };
     box.querySelector('.imp-list').onchange = sync;
     box.querySelector('#iAuto').onchange = sync;
@@ -649,13 +634,13 @@ function openImport(clientId) {
   const doImport = async () => {
     const auto = box.querySelector('#iAuto').checked;
     const picked = [...box.querySelectorAll('.imp-row')].filter((r) => r.querySelector('.imp-check').checked).map((r) => {
-      const title = r.querySelector('.imp-title').value.trim() || '회기 메모';
+      const title = r.querySelector('.imp-title').value.trim() || '상담일지';
       const h = parseHeader(title);
       return { row: r, title, content: r.querySelector('.imp-body').value.trim(), ts: h.ts };
     });
     busy = true; ctrl = new AbortController();
     box.querySelectorAll('input, textarea').forEach((x) => (x.disabled = true));
-    box.querySelector('.modal-actions').innerHTML = `<span class="sub" id="iProg" style="margin:0 auto 0 0"></span><button class="btn ghost" id="iStop">${auto ? '중단' : ''}</button>`;
+    box.querySelector('.bulk-actions').innerHTML = `<span class="sub" id="iProg" style="margin:0 auto 0 0"></span><button class="btn ghost" id="iStop">${auto ? '중단' : ''}</button>`;
     const stop = box.querySelector('#iStop'); if (!auto) stop.remove(); else stop.onclick = () => ctrl.abort();
     const prog = (t) => { box.querySelector('#iProg').textContent = t; };
     const created = [];
@@ -665,7 +650,7 @@ function openImport(clientId) {
       for (const [i, s] of picked.entries()) {
         prog(`기록 저장 중… ${i + 1}/${picked.length}`);
         const t0 = s.ts || Date.now() - (picked.length - i) * 1000;
-        const data = { clientId, type: 'journal', title: s.title, inputs: { [MEMO_FIELD]: s.content }, lenses: lensIds, useHistory: true, result: '', createdAt: t0, updatedAt: Date.now() };
+        const data = { clientId, type: 'journal', title: s.title, inputs: { [freeLabel()]: s.content }, mode: 'sentence', lenses: lensIds, useHistory: true, result: '', createdAt: t0, updatedAt: Date.now() };
         const ref = await addDoc(userCol('records'), data);
         records.unshift({ id: ref.id, ...data });
         created.push({ id: ref.id, ...data, row: s.row });
@@ -694,15 +679,15 @@ function openImport(clientId) {
             }
           }
         }
-        prog(`기록 ${created.length}개를 가져오고, 상담일지 ${ok}개를 만들었어요.` + (ok < created.length ? ' 못 만든 회기는 기록을 열어 [상담일지 만들기]를 눌러주세요.' : ''));
-      } else prog(`기록 ${created.length}개를 가져왔어요.`);
+        prog(`상담일지 ${created.length}개를 저장하고, ${ok}개의 내용을 만들었어요.` + (ok < created.length ? ' 못 만든 회기는 열어서 [상담일지 만들기]를 눌러주세요.' : ''));
+      } else prog(`상담일지 ${created.length}개를 저장했어요.`);
     } catch (err) {
       prog('저장하지 못했습니다: ' + friendlyError(err));
     }
     busy = false;
-    box.querySelector('.modal-actions').insertAdjacentHTML('beforeend', '<button class="btn" id="iDone">확인</button>');
+    box.querySelector('.bulk-actions').insertAdjacentHTML('beforeend', '<button class="btn" id="iDone">아동 화면으로</button>');
     box.querySelector('#iStop')?.remove();
-    box.querySelector('#iDone').onclick = () => { close(); route(); };
+    box.querySelector('#iDone').onclick = () => { location.hash = '#/c/' + clientId; };
     box.querySelector('#iDone').focus();
   };
 
@@ -721,7 +706,7 @@ function exportRecords(kind) {
     const line = '='.repeat(40);
     body = `농지 도우미 기록 · ${nowStamp()} 내보냄\n아동 ${clients.length}명 · 기록 ${records.length}건\n`;
     clients.forEach((c) => {
-      body += `\n${line}\n[아동] ${c.name}\n${c.memo ? '메모: ' + c.memo + '\n' : ''}${line}\n`;
+      body += `\n${line}\n[아동] ${c.name}\n${c.memo ? '아동 메모: ' + c.memo + '\n' : ''}${line}\n`;
       clientRecords(c.id).slice().sort((a, b) => a.createdAt - b.createdAt).forEach((r) => {
         body += `\n▶ [${TYPE[r.type]}] ${r.title} (작성 ${fmtDate(r.createdAt)})\n\n■ 입력 내용\n`;
         Object.entries(r.inputs || {}).filter(([, v]) => (v || '').trim()).forEach(([k, v]) => { body += `- ${k}: ${v.trim()}\n`; });
@@ -826,6 +811,22 @@ function defaultTitle(clientId, type) {
   return nowStamp();
 }
 
+// ---------- 작성 방식 ----------
+// sentence: 문장으로 쓰기(자유 서술 칸 하나) / fields: 항목별로 쓰기 / bulk: 여러 회기 한꺼번에(새 상담일지만)
+const MODES = { sentence: '문장으로 쓰기', fields: '항목별로 쓰기', bulk: '여러 회기 한꺼번에' };
+const freeField = (type) => manifest.fields[type].find((f) => f.free);
+const modeFields = (type, mode) => manifest.fields[type].filter((f) => (mode === 'sentence' ? f.free : !f.free));
+const OLD_FREE = { journal: '회기 메모', analysis: '사례 메모' };   // 예전 칸 이름 → 새 이름으로 옮김
+function inferMode(src) {
+  if (src.mode) return src.mode;
+  const inp = src.inputs || {};
+  if (!src.id) return prefs['mode_' + src.type] || 'sentence';
+  const free = freeField(src.type)?.label;
+  const hasFree = (inp[free] || '').trim();
+  const hasOther = modeFields(src.type, 'fields').some((f) => (inp[f.label] || '').trim());
+  return hasFree && !hasOther ? 'sentence' : 'fields';
+}
+
 function openEditor(src) {
   const type = src.type;
   const hasHistory = clientRecords(src.clientId).some((r) => r.id !== src.id && r.result);
@@ -834,7 +835,13 @@ function openEditor(src) {
     clientId: src.clientId,
     type,
     title: src.title || defaultTitle(src.clientId, type),
-    inputs: { ...(src.inputs || {}) },
+    inputs: (() => {
+      const inp = { ...(src.inputs || {}) };
+      const oldK = OLD_FREE[type], newK = freeField(type)?.label;
+      if (oldK && newK && inp[oldK] && !inp[newK]) { inp[newK] = inp[oldK]; delete inp[oldK]; }
+      return inp;
+    })(),
+    mode: null,
     lenses: src.lenses || prefs['lenses_' + type] || manifest.lenses.filter((l) => l[type]).map((l) => l.id),
     useHistory: src.useHistory ?? hasHistory,
     result: src.result || '',
@@ -842,7 +849,35 @@ function openEditor(src) {
     dirty: false,
     editingResult: false,
   };
+  editor.mode = inferMode({ ...src, inputs: editor.inputs });
+  if (editor.mode === 'bulk' && (editor.id || type !== 'journal')) editor.mode = 'sentence';
   renderEditor();
+}
+
+function renderEditorBody() {
+  const e = editor, host = $('#editorBody');
+  const bulk = e.mode === 'bulk';
+  $('#runBtn').hidden = bulk;
+  $('#outCard').classList.toggle('hidden', bulk || !e.result);
+  if (bulk) { renderBulk(host, e.clientId); return; }
+  const sentence = e.mode === 'sentence';
+  host.innerHTML = `
+    <p class="sub">${sentence
+      ? (e.type === 'journal' ? '오늘 회기에 있었던 일을 편하게 문장으로 적으세요. AI가 상담일지 양식에 맞춰 항목별로 정리합니다.' : '아동과 사례에 대해 아는 내용을 편하게 문장으로 적으세요. AI가 항목별로 나눠 분석합니다.')
+      : '아는 항목만 키워드나 짧은 문장으로 적으세요. 빈 칸은 건너뜁니다.'}</p>
+    <div class="field">
+      <label for="title">제목</label>
+      <input type="text" id="title" value="${esc(e.title)}">
+    </div>
+    ${modeFields(e.type, e.mode).map((f, i) => `
+      <div class="field">
+        <label for="f${i}">${esc(f.label)}</label>
+        <textarea id="f${i}" class="${f.free ? 'free' : ''}" data-label="${esc(f.label)}" placeholder="${esc(f.hint || '')}">${esc(e.inputs[f.label] || '')}</textarea>
+      </div>`).join('')}`;
+  $('#title').oninput = (ev) => { e.title = ev.target.value; markDirty(true); };
+  host.querySelectorAll('textarea[data-label]').forEach((t) => {
+    t.oninput = () => { e.inputs[t.dataset.label] = t.value; markDirty(true); };
+  });
 }
 
 function renderEditor() {
@@ -861,17 +896,11 @@ function renderEditor() {
     </div>
 
     <div class="card">
-      <h3>${e.type === 'analysis' ? '내담자 정보' : '회기 키워드'}</h3>
-      <p class="sub">문장이든 키워드든 편한 방식으로 적으세요. 맨 위 메모 칸에 문장으로만 적어도 AI가 칸별로 나눠 정리합니다. 빈 칸은 건너뜁니다.</p>
-      <div class="field">
-        <label for="title">제목</label>
-        <input type="text" id="title" value="${esc(e.title)}">
+      <div class="seg" role="tablist" aria-label="작성 방식">
+        ${Object.entries(MODES).filter(([k]) => k !== 'bulk' || (e.type === 'journal' && !e.id)).map(([k, v]) => `
+          <button role="tab" class="seg-btn ${e.mode === k ? 'on' : ''}" aria-selected="${e.mode === k}" data-mode="${k}">${v}</button>`).join('')}
       </div>
-      ${manifest.fields[e.type].map((f, i) => `
-        <div class="field">
-          <label for="f${i}">${esc(f.label)}</label>
-          <textarea id="f${i}" data-label="${esc(f.label)}" placeholder="${esc(f.hint || '')}">${esc(e.inputs[f.label] || '')}</textarea>
-        </div>`).join('')}
+      <div id="editorBody"></div>
     </div>
 
     <div class="card ${e.result ? '' : 'hidden'}" id="outCard" style="margin-top:18px">
@@ -886,13 +915,19 @@ function renderEditor() {
       <div class="result" id="result"></div>
     </div>`;
 
+  renderEditorBody();
   renderResult();
   setSaveState(e, e.dirty ? 'dirty' : e.id ? 'saved' : 'idle');
-
-  $('#title').oninput = (ev) => { e.title = ev.target.value; markDirty(true); };
-  $('#main').querySelectorAll('textarea[data-label]').forEach((t) => {
-    t.oninput = () => { e.inputs[t.dataset.label] = t.value; markDirty(true); };
+  $('#main').querySelectorAll('[data-mode]').forEach((b) => {
+    b.onclick = () => {
+      if (e.mode === b.dataset.mode) return;
+      e.mode = b.dataset.mode;
+      if (e.mode !== 'bulk') prefs['mode_' + e.type] = e.mode, savePrefs(prefs);
+      if (e.id) markDirty(true);
+      renderEditor();
+    };
   });
+
   $('#runBtn').onclick = openRunModal;
   $('#copyBtn').onclick = () => copyText(e.result);
   $('#editResultBtn').onclick = () => {
@@ -1009,7 +1044,7 @@ async function doSave(e, silent) {
   const rev = e.rev || 0;
   const data = {
     clientId: e.clientId, type: e.type, title: e.title.trim() || defaultTitle(e.clientId, e.type),
-    inputs: e.inputs, lenses: e.lenses, useHistory: e.useHistory, result: e.result, updatedAt: Date.now(),
+    inputs: e.inputs, mode: e.mode, lenses: e.lenses, useHistory: e.useHistory, result: e.result, updatedAt: Date.now(),
   };
   setSaveState(e, 'saving');
   try {
@@ -1036,7 +1071,7 @@ async function doSave(e, silent) {
 // ---------- 질문문 조립 ----------
 function buildPrompt(e = editor) {
   const lenses = manifest.lenses.filter((l) => e.lenses.includes(l.id));
-  const filled = manifest.fields[e.type]
+  const filled = modeFields(e.type, e.mode || 'fields')
     .map((f) => [f.label, (e.inputs[f.label] || '').trim()])
     .filter(([, v]) => v);
   const task = TYPE[e.type] + (e.type === 'journal' ? ' 작성' : '');

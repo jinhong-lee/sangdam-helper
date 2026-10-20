@@ -72,6 +72,7 @@
   }
   a { color: var(--primary); }
   .hidden { display: none !important; }
+  [hidden] { display: none !important; }   /* 버튼 등 display 지정 요소도 hidden이면 반드시 숨김 */
 
   /* 상단 바 */
   .topbar { position: sticky; top: 0; z-index: 5; background: var(--surface); border-bottom: 1px solid var(--border); }
@@ -152,6 +153,12 @@
   .modal-note { font-size: 13px; color: var(--accent); margin: 12px 0 0; }
   .modal-sm { max-width: 420px; }
   .modal-lg { max-width: 720px; }
+  .seg { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; margin-bottom: 18px; background: var(--surface-2); border-radius: 10px; width: fit-content; max-width: 100%; }
+  .seg-btn { height: 32px; padding: 0 14px; border: 0; border-radius: 8px; background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--text-2); cursor: pointer; }
+  .seg-btn:hover { color: var(--text); }
+  .seg-btn.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+  .bulk-title { font-size: 16px; margin: 0 0 4px; }
+  .bulk-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
   .hint-line { font-size: 12.5px; color: var(--text-2); margin: 8px 0 0; line-height: 1.6; }
   .hint-line.warn { color: var(--accent); }
   .file-link { cursor: pointer; margin-left: 4px; }
@@ -207,7 +214,7 @@
     background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
   }
   textarea { resize: vertical; min-height: 64px; }
-  textarea[data-label$="메모"] { min-height: 140px; }   /* 자유 서술 칸은 넉넉하게 */
+  textarea.free { min-height: 220px; }   /* 문장으로 쓰기 칸은 넉넉하게 */
   textarea:focus, input:focus { outline: 2px solid var(--primary); outline-offset: -1px; border-color: transparent; }
   textarea::placeholder, input::placeholder { color: var(--text-2); opacity: .75; }
   .title-input { font-size: 20px; font-weight: 700; background: transparent; border-color: transparent; padding: 4px 8px; margin-left: -8px; }
