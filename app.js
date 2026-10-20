@@ -875,9 +875,9 @@ function renderEditorBody() {
   const editForm = isEditForm(e);
   const autoTitle = sentence && e.type === 'journal' && !editForm;   // 새 상담일지 문장 쓰기는 제목을 내용 첫 줄(N회기·날짜)에서 자동으로 만듦
   host.innerHTML = `
-    <p class="sub">${editForm ? '작성할 때 고른 방식과 관계없이, 저장된 기록은 제목과 내용으로 수정해요. 고친 뒤 [다시 생성]을 누르면 결과에도 반영됩니다.' : sentence
+    ${editForm ? '' : `<p class="sub">${sentence
       ? (e.type === 'journal' ? '회기마다 첫 줄에 "N회기 날짜 시간"을 적고 내용을 이어서 쓰세요. 지난 회기까지 여러 개를 한꺼번에 넣으면 회기별 상담일지로 나눠 저장됩니다.' : '내담자와 사례에 대해 아는 내용을 편하게 문장으로 적으세요. AI가 항목별로 나눠 분석합니다.')
-      : '아는 항목만 키워드나 짧은 문장으로 적으세요. 빈 칸은 건너뜁니다.'}</p>
+      : '아는 항목만 키워드나 짧은 문장으로 적으세요. 빈 칸은 건너뜁니다.'}</p>`}
     ${autoTitle ? '' : `<div class="field">
       <label for="title">제목</label>
       <input type="text" id="title" value="${esc(e.title)}">
@@ -885,7 +885,7 @@ function renderEditorBody() {
     ${modeFields(e.type, e.mode).map((f, i) => `
       <div class="field">
         <label for="f${i}">${esc(f.label)}</label>
-        <textarea id="f${i}" class="${f.free ? 'free' : ''}" data-label="${esc(f.label)}" placeholder="${esc(f.hint || '')}">${esc(e.inputs[f.label] || '')}</textarea>
+        <textarea id="f${i}" class="${f.free ? 'free' : ''}" data-label="${esc(f.label)}" placeholder="${esc(editForm && f.free ? EDIT_HINT[e.type] : (f.hint || ''))}">${esc(e.inputs[f.label] || '')}</textarea>
       </div>`).join('')}`;
   if ($('#title')) $('#title').oninput = (ev) => { e.title = ev.target.value; markDirty(true); };
   host.querySelectorAll('textarea[data-label]').forEach((t) => {
@@ -995,6 +995,8 @@ function normalizeForEdit(e) {
   e.mode = 'sentence';
 }
 const isEditForm = (e) => e.editing && !!e.id;   // 저장된 기록 수정 중
+// 수정 화면은 기록 하나만 다루므로 여러 회기 예시 대신 한 회기 예시
+const EDIT_HINT = { journal: "예) 클레이 처음 만짐, 손끝만 대다가 점점 손바닥 전체로 만지며 웃음. '엄마 손 같아'라고 말함.", analysis: "예) 8세 남아, 초2. 수업 중 자리 이탈과 친구를 때리는 일이 잦아 담임 권유로 의뢰됨." };
 
 // ---------- 편집 화면 ----------
 function renderEditForm() {
