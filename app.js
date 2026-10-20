@@ -289,7 +289,7 @@ function viewHome() {
     return;
   }
   $('#main').innerHTML = `
-    <div class="page-head" style="align-items:center"><h2>전체 기록</h2><button class="btn" id="homeAddClient">+ 아동 추가</button></div>
+    <div class="page-head" style="align-items:center"><h2>전체 기록</h2><button class="btn h32" id="homeAddClient">+ 아동 추가</button></div>
     ${profile.geminiKey ? '' : '<div class="card" style="margin-bottom:16px">결과를 만들려면 먼저 AI 이용 키를 등록해 주세요. <a href="#/settings">설정으로 가기</a></div>'}
     ${records.length ? listHTML(records, true) : `
       <div class="card empty">
