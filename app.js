@@ -113,7 +113,7 @@ $('#loginBtn').onclick = async () => {
   }
 };
 $('#logoutBtn').onclick = async () => {
-  if (editor?.dirty && !confirm('저장하지 않은 내용이 있습니다. 로그아웃할까요?')) return;
+  if (editor?.dirty) { try { await saveEditor(true); } catch { return; } }
   running?.abort();
   await signOut(auth);
   location.hash = '';
@@ -124,18 +124,26 @@ let lastHash = location.hash;
 let skipHash = false;
 window.addEventListener('hashchange', () => {
   if (skipHash) { skipHash = false; return; }
-  if (editor?.dirty && !confirm('저장하지 않은 내용이 있습니다. 이동할까요?')) {
-    skipHash = true; location.hash = lastHash; return;
-  }
+  if (editor?.dirty) saveEditor(true);      // 확인 없이 바로 저장하고 이동
   lastHash = location.hash;
   route();
 });
-window.addEventListener('beforeunload', (e) => { if (editor?.dirty) { e.preventDefault(); e.returnValue = ''; } });
+window.addEventListener('beforeunload', (e) => {
+  if (editor?.dirty || editor?.saveState === 'saving') { saveEditor(true); e.preventDefault(); e.returnValue = ''; }
+});
+// 폰에서 다른 앱으로 넘어갈 때도 바로 저장
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && editor?.dirty) saveEditor(true); });
+// Cmd/Ctrl+S로 즉시 저장
+document.addEventListener('keydown', (ev) => {
+  if ((ev.metaKey || ev.ctrlKey) && ev.key === 's' && editor) { ev.preventDefault(); editor.dirty = true; saveEditor(false); }
+});
 function setHashSilently(h) { history.replaceState(null, '', h); lastHash = h; }
 
 function route() {
   if (!user) return;
   running?.abort();
+  clearTimeout(autoT);
+  closeMenus();
   editor = null;
   const [, page, a, b] = (location.hash || '#/').split('/');
   if (page === 'c' && clients.some((c) => c.id === a)) viewClient(a);
@@ -308,17 +316,8 @@ function viewClient(id) {
     await updateDoc(userDoc('clients', id), { memo: c.memo, updatedAt: c.updatedAt });
     toast('메모를 저장했습니다');
   };
-  // ⋯ 메뉴
-  const moreBtn = $('#moreBtn'), moreMenu = $('#moreMenu');
-  const closeMenu = () => { moreMenu.hidden = true; moreBtn.setAttribute('aria-expanded', 'false'); document.removeEventListener('click', outside); document.removeEventListener('keydown', escMenu); };
-  const outside = (ev) => { if (!ev.target.closest('.more')) closeMenu(); };
-  const escMenu = (ev) => { if (ev.key === 'Escape') { closeMenu(); moreBtn.focus(); } };
-  moreBtn.onclick = () => {
-    if (!moreMenu.hidden) return closeMenu();
-    moreMenu.hidden = false; moreBtn.setAttribute('aria-expanded', 'true');
-    moreMenu.querySelector('button').focus();
-    setTimeout(() => { document.addEventListener('click', outside); document.addEventListener('keydown', escMenu); });
-  };
+  $('#moreBtn').onclick = () => toggleMenu($('#moreBtn'));
+  const closeMenu = closeMenus;
   $('#renameBtn').onclick = async () => {
     closeMenu();
     const name = await nameModal({ title: '이름 바꾸기', okLabel: '바꾸기', value: c.name, exceptId: c.id });
@@ -378,19 +377,40 @@ function listHTML(list, showClient) {
         <div class="item-meta">${showClient ? esc(clientName(r.clientId)) + ' · ' : ''}${fmtDate(r.createdAt)}${r.updatedAt - r.createdAt > 60000 ? ' · 수정됨' : ''}</div>
         <div class="item-preview">${esc(plain(r.result).slice(0, 160)) || '(아직 결과 없음)'}</div>
       </div>
-      <div class="item-actions">
-        <button class="btn ghost small" data-dup="${r.id}" title="같은 내용으로 새 기록 만들기">복제</button>
-        <button class="btn danger small" data-del="${r.id}">삭제</button>
+      <div class="more">
+        <button class="more-btn" data-more aria-haspopup="menu" aria-expanded="false" aria-label="기록 메뉴">⋯</button>
+        <div class="more-menu right" role="menu" hidden>
+          <button role="menuitem" data-dup="${r.id}">복제</button>
+          <button role="menuitem" class="danger" data-del="${r.id}">삭제</button>
+        </div>
       </div>
     </div>`).join('')}</div>`;
 }
 
+// ⋯ 메뉴 공용: 하나만 열리고, 바깥 클릭·ESC로 닫힘
+function closeMenus() {
+  document.querySelectorAll('.more-menu:not([hidden])').forEach((m) => {
+    m.hidden = true; m.previousElementSibling?.setAttribute('aria-expanded', 'false');
+  });
+}
+function toggleMenu(btn) {
+  const menu = btn.nextElementSibling;
+  const willOpen = menu.hidden;
+  closeMenus();
+  if (!willOpen) return;
+  menu.hidden = false; btn.setAttribute('aria-expanded', 'true');
+  menu.querySelector('button')?.focus();
+}
+document.addEventListener('click', (ev) => { if (!ev.target.closest('.more')) closeMenus(); });
+document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeMenus(); });
+
 function bindList() {
   $('#main').querySelectorAll('[data-open]').forEach((el) => {
-    el.onclick = (e) => { if (!e.target.closest('button')) location.hash = '#/r/' + el.dataset.open; };
+    el.onclick = (e) => { if (!e.target.closest('button, .more')) location.hash = '#/r/' + el.dataset.open; };
   });
-  $('#main').querySelectorAll('[data-dup]').forEach((b) => { b.onclick = () => duplicate(b.dataset.dup); });
-  $('#main').querySelectorAll('[data-del]').forEach((b) => { b.onclick = () => removeRecord(b.dataset.del); });
+  $('#main').querySelectorAll('.item [data-more]').forEach((b) => { b.onclick = () => toggleMenu(b); });
+  $('#main').querySelectorAll('[data-dup]').forEach((b) => { b.onclick = () => { closeMenus(); duplicate(b.dataset.dup); }; });
+  $('#main').querySelectorAll('[data-del]').forEach((b) => { b.onclick = () => { closeMenus(); removeRecord(b.dataset.del); }; });
 }
 
 async function copyText(text) {
@@ -407,6 +427,60 @@ async function duplicate(id) {
   records.unshift({ id: ref.id, ...data });
   toast('복제했습니다');
   location.hash = '#/r/' + ref.id;
+}
+
+// ---------- 기록 내보내기 ----------
+function exportRecords(kind) {
+  const d = new Date(), p2 = (n) => String(n).padStart(2, '0');
+  const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}`;
+  let body, type;
+  if (kind === 'json') {
+    body = JSON.stringify({ exportedAt: new Date().toISOString(), clients, records }, null, 2);
+    type = 'application/json';
+  } else {
+    const line = '='.repeat(40);
+    body = `농지 도우미 기록 · ${nowStamp()} 내보냄\n아동 ${clients.length}명 · 기록 ${records.length}건\n`;
+    clients.forEach((c) => {
+      body += `\n${line}\n[아동] ${c.name}\n${c.memo ? '메모: ' + c.memo + '\n' : ''}${line}\n`;
+      clientRecords(c.id).slice().sort((a, b) => a.createdAt - b.createdAt).forEach((r) => {
+        body += `\n▶ [${TYPE[r.type]}] ${r.title} (작성 ${fmtDate(r.createdAt)})\n\n■ 입력 내용\n`;
+        Object.entries(r.inputs || {}).filter(([, v]) => (v || '').trim()).forEach(([k, v]) => { body += `- ${k}: ${v.trim()}\n`; });
+        body += `\n■ 결과\n${(r.result || '(아직 결과 없음)').trim()}\n\n${'-'.repeat(40)}\n`;
+      });
+    });
+    type = 'text/plain';
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([body], { type: type + ';charset=utf-8' }));
+  a.download = `농지도우미_기록_${stamp}.${kind}`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  toast('파일을 저장했습니다');
+}
+
+// 일반 확인 모달
+function confirmModal({ title, message, okLabel = '확인', danger = false }) {
+  return new Promise((resolve) => {
+    const opener = document.activeElement;
+    const back = document.createElement('div');
+    back.className = 'modal-back';
+    back.innerHTML = `
+      <div class="modal modal-sm" role="alertdialog" aria-modal="true" aria-labelledby="cTitle" aria-describedby="cMsg">
+        <div class="modal-body"><h3 id="cTitle">${esc(title)}</h3><p class="sub" id="cMsg" style="margin:0">${esc(message)}</p></div>
+        <div class="modal-actions">
+          <button class="btn ghost" data-cancel>취소</button>
+          <button class="btn ${danger ? 'btn-delete' : ''}" data-ok>${esc(okLabel)}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(back);
+    const done = (v) => { document.removeEventListener('keydown', onKey); back.remove(); opener?.focus?.(); resolve(v); };
+    const onKey = (ev) => { if (ev.key === 'Escape') done(false); };
+    document.addEventListener('keydown', onKey);
+    back.querySelector('[data-ok]').onclick = () => done(true);
+    back.querySelector('[data-cancel]').onclick = () => done(false);
+    back.onclick = (ev) => { if (ev.target === back) done(false); };
+    back.querySelector('[data-cancel]').focus();
+  });
 }
 
 // 삭제 확인 모달: 입력칸에 "삭제"를 적어야 삭제 버튼이 눌림
@@ -457,6 +531,7 @@ async function removeRecord(id) {
   records = records.filter((x) => x.id !== id);
   toast('삭제했습니다');
   if (editor) editor.dirty = false;
+  clearTimeout(autoT);
   if (location.hash === '#/r/' + id) location.hash = '#/c/' + r.clientId;
   else route();
 }
@@ -499,9 +574,8 @@ function renderEditor() {
         <div class="eyebrow">${TYPE[e.type]}${e.createdAt ? ' · ' + fmtDate(e.createdAt) + ' 작성' : ' · 새 기록'}</div>
       </div>
       <div class="row head-actions">
-        <span class="dirty" id="dirtyMark"></span>
+        <span class="save-state" id="dirtyMark" aria-live="polite"></span>
         ${e.id ? '<button class="btn danger small" id="delBtn">삭제</button>' : ''}
-        <button class="btn ghost" id="saveBtn">저장</button>
         <button class="btn" id="runBtn">${e.result ? SHORT[e.type] + ' 다시 만들기' : TYPE[e.type] + ' 만들기'}</button>
       </div>
     </div>
@@ -533,7 +607,7 @@ function renderEditor() {
     </div>`;
 
   renderResult();
-  markDirty(e.dirty);
+  setSaveState(e, e.dirty ? 'dirty' : e.id ? 'saved' : 'idle');
 
   $('#title').oninput = (ev) => { e.title = ev.target.value; markDirty(true); };
   $('#main').querySelectorAll('textarea[data-label]').forEach((t) => {
@@ -547,7 +621,6 @@ function renderEditor() {
     $('#editResultBtn').textContent = e.editingResult ? '수정 완료' : '직접 수정';
     renderResult();
   };
-  $('#saveBtn').onclick = () => saveEditor(false);
   if (e.id) $('#delBtn').onclick = () => removeRecord(e.id);
 }
 
@@ -622,35 +695,60 @@ function renderResult() {
   }
 }
 
-function markDirty(on) {
-  if (!editor) return;
-  editor.dirty = on;
-  const m = $('#dirtyMark'); if (m) m.textContent = on ? '저장하지 않은 변경 사항이 있습니다' : '';
+// ---------- 자동 저장 ----------
+// 입력을 멈추고 1.5초 뒤 저장. 저장은 한 줄로 세워 순서대로 처리하고, 저장 중 새 입력이 오면 다시 저장 대기 상태로 둠.
+let autoT = null;
+let saveChain = Promise.resolve();
+function setSaveState(e, state) {
+  e.saveState = state;
+  if (editor !== e) return;
+  const m = $('#dirtyMark'); if (!m) return;
+  m.className = 'save-state ' + state;
+  m.innerHTML = { idle: '', dirty: '입력 중…', saving: '저장 중…', saved: '✓ 저장됨', error: '저장 실패 · <button class="link-btn" id="retrySave">다시 시도</button>' }[state] || '';
+  if (state === 'error') $('#retrySave').onclick = () => saveEditor(true);
 }
-
-async function saveEditor(silent) {
-  const e = editor;
-  if (e.editingResult) e.result = $('#resultEdit').value;
+function markDirty(on) {
+  const e = editor; if (!e) return;
+  e.dirty = on;
+  if (!on) return;
+  e.rev = (e.rev || 0) + 1;
+  setSaveState(e, 'dirty');
+  clearTimeout(autoT);
+  autoT = setTimeout(() => { if (editor === e && e.dirty) saveEditor(true); }, 1500);
+}
+function saveEditor(silent = true) {
+  const e = editor; if (!e) return Promise.resolve();
+  clearTimeout(autoT);
+  const p = saveChain.then(() => doSave(e, silent));
+  saveChain = p.catch(() => {});
+  return p;
+}
+async function doSave(e, silent) {
+  if (!e.dirty && e.id) return;            // 이미 저장된 상태
+  if (editor === e && e.editingResult) { const t = $('#resultEdit'); if (t) e.result = t.value; }
+  const rev = e.rev || 0;
   const data = {
     clientId: e.clientId, type: e.type, title: e.title.trim() || defaultTitle(e.clientId, e.type),
     inputs: e.inputs, lenses: e.lenses, useHistory: e.useHistory, result: e.result, updatedAt: Date.now(),
   };
+  setSaveState(e, 'saving');
   try {
     if (e.id) {
       await updateDoc(userDoc('records', e.id), data);
-      Object.assign(records.find((r) => r.id === e.id), data);
+      Object.assign(records.find((r) => r.id === e.id) || {}, data);
     } else {
       data.createdAt = Date.now();
       const ref = await addDoc(userCol('records'), data);
       e.id = ref.id; e.createdAt = data.createdAt;
       records.unshift({ id: ref.id, ...data });
-      setHashSilently('#/r/' + ref.id);
+      if (editor === e) setHashSilently('#/r/' + ref.id);
     }
-    markDirty(false);
-    if (!silent) { toast('저장했습니다'); renderEditor(); }
+    if ((e.rev || 0) === rev) { e.dirty = false; setSaveState(e, 'saved'); }
+    if (!silent) toast('저장했습니다');
     renderNav();
   } catch (err) {
-    toast('저장하지 못했습니다: ' + err.message);
+    setSaveState(e, 'error');
+    toast('저장하지 못했습니다. 인터넷 연결을 확인해 주세요.');
     throw err;
   }
 }
@@ -684,7 +782,7 @@ function buildPrompt() {
     }
   }
 
-  out += sep + `# [입력 정보]\n\n아동: ${clientName(e.clientId)}\n\n` + filled.map(([k, v]) => `## ${k}\n${v}`).join('\n\n');
+  out += sep + `# [입력 정보]\n\n아동: ${clientName(e.clientId)}\n기록: ${e.title}\n\n` + filled.map(([k, v]) => `## ${k}\n${v}`).join('\n\n');
   out += sep + `${lenses.length ? '[참고자료]의 이론을 순서대로 빠짐없이 적용해 ' : ''}[출력 양식]에 맞춰 ${task}을 해주십시오. 답변은 한국어 마크다운으로 작성하십시오.`;
   return { system: docs[manifest.role.id], user: out, filledCount: filled.length };
 }
@@ -871,6 +969,7 @@ async function run() {
       : '빈 답변이 돌아왔습니다. 다시 시도해 주세요.');
     if (editor !== e) return;
     e.result = result.text;
+    e.dirty = true; e.rev = (e.rev || 0) + 1;   // 결과는 반드시 저장되도록 표시
     await saveEditor(true);
     renderEditor();
     setStatus(result.finish === 'MAX_TOKENS'
@@ -918,11 +1017,21 @@ function viewSettings() {
         </div>
       </div>
       <div class="card">
+        <h3>기록 내보내기</h3>
+        <p class="sub">내 아동과 기록 전체를 파일로 저장합니다. 정기적으로 받아두면 실수로 지웠을 때도 내용을 보관할 수 있어요.</p>
+        <div class="row">
+          <button class="btn small" id="exportTxt">읽기용 파일(.txt) 받기</button>
+          <button class="btn ghost small" id="exportJson">백업용 파일(.json) 받기</button>
+        </div>
+      </div>
+      <div class="card">
         <h3>계정</h3>
         <p class="sub">${esc(user.email || '')} 으로 로그인되어 있습니다. 아동 ${clients.length}명, 기록 ${records.length}건</p>
       </div>
     </div>`;
 
+  $('#exportTxt').onclick = () => exportRecords('txt');
+  $('#exportJson').onclick = () => exportRecords('json');
   const state = (msg, cls) => { const s = $('#keyState'); s.className = 'key-state ' + (cls || ''); s.textContent = msg; };
   $('#saveKey').onclick = async () => {
     const k = $('#keyInput').value.trim();
@@ -940,7 +1049,7 @@ function viewSettings() {
   };
   const rm = $('#removeKey');
   if (rm) rm.onclick = async () => {
-    if (!confirm('저장된 키를 지울까요?')) return;
+    if (!(await confirmModal({ title: '이용 키 삭제', message: '저장된 AI 이용 키를 지웁니다. 다시 쓰려면 키를 새로 등록해야 합니다.', okLabel: '키 삭제', danger: true }))) return;
     await setDoc(doc(db, 'users', user.uid), { geminiKey: '' }, { merge: true });
     profile.geminiKey = ''; models = null;
     viewSettings();

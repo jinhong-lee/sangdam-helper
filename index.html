@@ -86,6 +86,7 @@
   .layout { max-width: 1240px; margin: 0 auto; padding: 20px 16px 80px; display: grid; grid-template-columns: 230px 1fr; gap: 42px; align-items: start; }
   @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
   .sidebar { position: sticky; top: 72px; min-width: 0; }
+  #main { min-width: 0; }
   .nav > *, .tree, .tree-kids, .tree-kids > * { min-width: 0; }
   @media (max-width: 860px) { .sidebar { position: static; } }
   .side-title { font-size: 12px; font-weight: 700; color: var(--text-2); margin: 0 0 8px 10px; }
@@ -137,9 +138,11 @@
   .eyebrow { font-size: 12px; color: var(--accent); font-weight: 700; }
   .back { font-size: 13px; color: var(--text-2); text-decoration: none; display: inline-block; margin-bottom: 6px; }
   .back:hover { color: var(--primary); }
-  .editor-head { align-items: center; }
+  .editor-head { align-items: center; position: sticky; top: 56px; z-index: 4; background: var(--bg); padding: 12px 0; margin: -12px 0 4px; }
   .head-actions { align-items: center; }
-  .head-actions .dirty { font-size: 12.5px; }
+  .save-state { font-size: 12.5px; color: var(--text-2); }
+  .save-state.saved { color: var(--primary); }
+  .save-state.error { color: var(--error); }
   .head-actions .btn.danger { margin-right: 8px; }
   .modal-back { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,.4); display: grid; place-items: center; padding: 16px; }
   .modal { width: 100%; max-width: 560px; max-height: calc(100vh - 32px); display: flex; flex-direction: column; background: var(--surface); border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
@@ -157,6 +160,7 @@
   .more-btn:hover, .more-btn[aria-expanded="true"] { background: var(--surface-2); color: var(--text); }
   .more-menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 50; min-width: 140px; padding: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.12); display: grid; }
   .more-menu[hidden] { display: none; }
+  .more-menu.right { left: auto; right: 0; }
   .more-menu button { text-align: left; padding: 8px 10px; border: 0; border-radius: 8px; background: none; font: inherit; font-size: 14px; color: var(--text); cursor: pointer; }
   .more-menu button:hover, .more-menu button:focus-visible { background: var(--surface-2); outline: none; }
   .more-menu button.danger { color: var(--error); }
@@ -202,11 +206,9 @@
   .item { display: flex; gap: 14px; align-items: flex-start; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; cursor: pointer; }
   .item:hover { border-color: var(--primary); }
   .item-body { flex: 1; min-width: 0; }
-  .item-title { font-weight: 700; font-size: 15px; }
+  .item-title { font-weight: 700; font-size: 15px; overflow-wrap: anywhere; }
   .item-meta { font-size: 12.5px; color: var(--text-2); margin-top: 2px; }
   .item-preview { font-size: 13px; color: var(--text-2); margin-top: 6px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-  .item-actions { display: flex; gap: 4px; flex-shrink: 0; }
-  @media (max-width: 600px) { .item { flex-wrap: wrap; } .item-actions { width: 100%; justify-content: flex-end; } }
   .tag { display: inline-block; font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-right: 6px; vertical-align: 1px; }
   .tag.analysis { background: var(--accent-soft); color: var(--accent); }
   .tag.journal { background: var(--primary-soft); color: var(--primary); }
