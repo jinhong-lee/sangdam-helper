@@ -4,8 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>상담 도우미</title>
-<meta name="description" content="키워드만 넣으면 사례 분석과 상담일지용 질문문을 만들어주는 도구">
+<meta name="description" content="키워드만 넣으면 사례 분석과 상담일지를 바로 만들어주는 도구">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
 <style>
   :root {
     --bg: #F6F4F0;
@@ -17,10 +19,12 @@
     --primary: #2F5D50;
     --primary-hover: #244A40;
     --primary-soft: #E3EDE9;
+    --on-primary: #FFFFFF;
     --accent: #B9784A;
     --accent-soft: #F6EADF;
     --warn-bg: #FFF6E5;
     --warn-text: #7A5212;
+    --error: #B3261E;
     --radius: 14px;
     --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.04);
   }
@@ -35,10 +39,12 @@
       --primary: #7FB8A6;
       --primary-hover: #95C7B7;
       --primary-soft: #23332E;
+      --on-primary: #10201B;
       --accent: #D9A27A;
       --accent-soft: #3A2C22;
       --warn-bg: #33291A;
       --warn-text: #E8C78E;
+      --error: #F2B8B5;
       --shadow: none;
     }
   }
@@ -81,13 +87,14 @@
 
   .field { margin-bottom: 16px; }
   .field label { display: block; font-weight: 600; font-size: 14px; margin-bottom: 6px; }
-  textarea, input[type="text"] {
+  textarea, input[type="text"], input[type="password"] {
     width: 100%; font: inherit; color: var(--text);
     background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
-    padding: 10px 12px; resize: vertical; min-height: 64px;
+    padding: 10px 12px;
   }
+  textarea { resize: vertical; min-height: 64px; }
   textarea:focus, input:focus { outline: 2px solid var(--primary); outline-offset: -1px; border-color: transparent; }
-  textarea::placeholder { color: var(--text-2); opacity: .75; }
+  textarea::placeholder, input::placeholder { color: var(--text-2); opacity: .75; }
 
   .lens { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--border); cursor: pointer; }
   .lens:first-of-type { border-top: 0; }
@@ -98,79 +105,83 @@
   .lens-tools { display: flex; gap: 8px; margin: 4px 0 10px; }
   .link-btn { border: 0; background: none; color: var(--primary); font: inherit; font-size: 13px; cursor: pointer; padding: 0; text-decoration: underline; text-underline-offset: 3px; }
 
-  .side { position: sticky; top: 16px; display: grid; gap: 14px; }
+  .side { position: sticky; top: 16px; display: grid; gap: 10px; }
   @media (max-width: 860px) { .side { position: static; } }
 
   .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: 6px;
     border: 0; border-radius: 10px; padding: 12px 18px; font: inherit; font-weight: 700; cursor: pointer;
-    background: var(--primary); color: #fff; text-decoration: none;
+    background: var(--primary); color: var(--on-primary); text-decoration: none;
   }
-  @media (prefers-color-scheme: dark) { .btn { color: #10201B; } }
   .btn:hover { background: var(--primary-hover); }
+  .btn:disabled { opacity: .5; cursor: default; }
   .btn.block { width: 100%; }
   .btn.ghost { background: var(--surface-2); color: var(--text); }
   .btn.ghost:hover { background: var(--border); }
   .btn.small { padding: 8px 12px; font-size: 13px; font-weight: 600; }
-  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .hint { font-size: 12.5px; color: var(--text-2); text-align: center; }
 
   .output { margin-top: 20px; display: none; }
   .output.show { display: block; }
-  .output textarea { min-height: 320px; font-size: 13px; line-height: 1.55; background: var(--surface-2); }
-  .meta { font-size: 13px; color: var(--text-2); margin: 8px 0 12px; }
-  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
-  @media (max-width: 600px) { .steps { grid-template-columns: 1fr; } }
-  .step { background: var(--primary-soft); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
-  .step b { color: var(--primary); display: block; font-size: 12px; }
+  .out-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+  .status { font-size: 13px; color: var(--text-2); display: flex; align-items: center; gap: 8px; }
+  .status:not(:empty) { margin-bottom: 14px; }
+  .spinner { width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .result { font-size: 14.5px; line-height: 1.75; overflow-wrap: anywhere; }
+  .result h1, .result h2, .result h3 { line-height: 1.4; margin: 1.4em 0 .5em; }
+  .result h1 { font-size: 19px; } .result h2 { font-size: 17px; } .result h3 { font-size: 15.5px; }
+  .result > :first-child { margin-top: 0; }
+  .result table { border-collapse: collapse; width: 100%; margin: .8em 0; font-size: 13.5px; display: block; overflow-x: auto; }
+  .result th, .result td { border: 1px solid var(--border); padding: 7px 10px; text-align: left; vertical-align: top; }
+  .result th { background: var(--surface-2); }
+  .result blockquote { margin: .8em 0; padding: 4px 14px; border-left: 3px solid var(--accent); color: var(--text-2); }
+  .result code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+  .error-box { color: var(--error); background: var(--surface-2); padding: 12px 14px; border-radius: 10px; font-size: 14px; }
 
   .toast {
     position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px);
     background: var(--text); color: var(--bg); padding: 10px 18px; border-radius: 999px; font-size: 14px;
-    opacity: 0; transition: .2s; pointer-events: none;
+    opacity: 0; transition: .2s; pointer-events: none; z-index: 10;
   }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-  /* 설정 */
-  details { border: 1px solid var(--border); border-radius: 12px; margin-bottom: 10px; background: var(--surface); }
-  summary { padding: 12px 16px; cursor: pointer; font-weight: 600; display: flex; justify-content: space-between; align-items: center; gap: 10px; list-style: none; }
-  summary::-webkit-details-marker { display: none; }
-  summary::after { content: "펼치기"; font-size: 12px; color: var(--text-2); font-weight: 500; }
-  details[open] summary::after { content: "접기"; }
-  .badge { font-size: 11px; background: var(--accent-soft); color: var(--accent); padding: 2px 8px; border-radius: 999px; font-weight: 700; margin-left: 6px; }
-  .details-body { padding: 0 16px 16px; }
-  .details-body textarea { min-height: 280px; font-size: 13px; font-family: ui-monospace, "D2Coding", Consolas, monospace; }
-  .section-title { font-size: 15px; font-weight: 700; margin: 26px 0 10px; }
-  .section-title:first-child { margin-top: 0; }
-  .help { font-size: 13px; color: var(--text-2); margin: -4px 0 10px; }
+  .steps { counter-reset: s; list-style: none; padding: 0; margin: 0 0 18px; display: grid; gap: 8px; }
+  .steps li { counter-increment: s; display: flex; gap: 10px; align-items: flex-start; font-size: 14px; }
+  .steps li::before { content: counter(s); flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; background: var(--primary-soft); color: var(--primary); font-weight: 700; font-size: 12px; display: grid; place-items: center; margin-top: 1px; }
+  .steps a { color: var(--primary); }
+  .key-state { font-size: 13px; margin-top: 8px; }
+  .key-state.ok { color: var(--primary); }
+  .key-state.bad { color: var(--error); }
   .hidden { display: none !important; }
-  .error { color: #B3261E; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
     <h1>상담 도우미</h1>
-    <p>키워드만 넣으면 제미나이에 붙여넣을 질문문을 만들어 드립니다.</p>
+    <p>키워드만 넣으면 사례 분석과 상담일지를 바로 만들어 드립니다.</p>
   </header>
 
   <div class="notice">
-    <b>개인정보 보호</b> · 이 페이지는 입력 내용을 어디에도 보내거나 저장하지 않습니다. 다만 제미나이에 붙여넣을 때는 <b>실명·학교·지역을 빼고</b> "A아동, 8세"처럼 익명으로 적어주세요.
+    <b>개인정보 보호</b> · 무료 이용 시 입력 내용을 구글 담당자가 품질 개선 목적으로 볼 수 있습니다. <b>실명·학교·지역·연락처 등 아이를 알아볼 수 있는 정보는 절대 넣지 말고</b> "A아동, 8세"처럼 익명으로 적어주세요.
   </div>
 
   <nav class="tabs" role="tablist">
     <button class="tab" role="tab" data-mode="analysis" aria-selected="true">사례 분석</button>
     <button class="tab" role="tab" data-mode="journal" aria-selected="false">상담일지</button>
-    <button class="tab" role="tab" data-mode="settings" aria-selected="false">설정</button>
+    <button class="tab" role="tab" data-mode="settings" aria-selected="false">처음 설정</button>
   </nav>
 
-  <p id="loadError" class="error hidden"></p>
+  <p id="loadError" class="error-box hidden" style="margin-top:16px"></p>
 
   <!-- 분석 · 일지 화면 -->
   <section id="workView">
     <div class="grid">
       <div class="card">
         <h2 id="formTitle">내담자 정보</h2>
-        <p class="sub" id="formSub">아는 것만 키워드로 적어도 됩니다. 빈 칸은 건너뜁니다.</p>
+        <p class="sub">아는 것만 키워드로 적어도 됩니다. 빈 칸은 건너뜁니다.</p>
         <div id="fields"></div>
         <button class="link-btn" id="clearBtn">입력 내용 모두 지우기</button>
       </div>
@@ -178,63 +189,52 @@
       <aside class="side">
         <div class="card">
           <h2>적용할 이론</h2>
-          <p class="sub">체크한 이론을 번호 순서대로 빠짐없이 적용하도록 요청합니다.</p>
+          <p class="sub">체크한 이론을 번호 순서대로 빠짐없이 적용합니다.</p>
           <div class="lens-tools">
             <button class="link-btn" id="allOn">모두 선택</button>
             <button class="link-btn" id="allOff">모두 해제</button>
           </div>
           <div id="lenses"></div>
         </div>
-        <button class="btn block" id="buildBtn">질문문 만들기</button>
+        <button class="btn block" id="runBtn">바로 만들기</button>
+        <p class="hint" id="runHint"></p>
       </aside>
     </div>
 
     <div class="card output" id="output">
-      <h2>완성된 질문문</h2>
-      <div class="steps">
-        <div class="step"><b>1단계</b>아래 "복사하기"를 누르세요</div>
-        <div class="step"><b>2단계</b>"제미나이 열기"로 새 대화를 시작하세요</div>
-        <div class="step"><b>3단계</b>붙여넣고 보내세요. 답이 끊기면 "계속"이라고 입력하세요</div>
+      <div class="out-head">
+        <h2 id="outTitle">결과</h2>
+        <div class="row">
+          <button class="btn small" id="copyBtn">복사하기</button>
+          <button class="btn ghost small" id="againBtn">다시 만들기</button>
+        </div>
       </div>
-      <div class="row">
-        <button class="btn" id="copyBtn">복사하기</button>
-        <a class="btn ghost" href="https://gemini.google.com/app" target="_blank" rel="noopener">제미나이 열기 ↗</a>
-      </div>
-      <p class="meta" id="outMeta"></p>
-      <textarea id="outText" readonly></textarea>
+      <div class="status" id="status"></div>
+      <div class="result" id="result"></div>
     </div>
   </section>
 
-  <!-- 설정 화면 -->
+  <!-- 처음 설정 -->
   <section id="settingsView" class="hidden" style="margin-top:20px">
     <div class="card">
-      <div class="section-title">이론 · 양식 문구 고치기</div>
-      <p class="help">고친 내용은 이 브라우저에만 저장됩니다. 다른 기기에서도 쓰려면 아래 "백업"을 이용하세요.</p>
-      <div id="docEditors"></div>
-
-      <div class="section-title">입력 칸 고치기</div>
-      <p class="help">한 줄에 칸 하나씩, <b>칸 이름 | 예시 문구</b> 형식으로 적어주세요.</p>
+      <h2>구글 무료 이용 키 등록 (처음 한 번만)</h2>
+      <p class="sub">이 키가 있어야 결과를 바로 만들 수 있습니다. 무료이며 카드 등록이 필요 없습니다.</p>
+      <ol class="steps">
+        <li><span><a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">구글 AI 스튜디오 열기 ↗</a> 를 누르고 구글 계정으로 로그인합니다.</span></li>
+        <li><span>약관 동의 화면이 나오면 동의합니다.</span></li>
+        <li><span><b>Create API key</b>(API 키 만들기)를 누릅니다.</span></li>
+        <li><span>만들어진 키(AIza로 시작하는 긴 글자)를 복사해서 아래 칸에 붙여넣고 <b>저장</b>을 누릅니다.</span></li>
+      </ol>
       <div class="field">
-        <label for="fieldsAnalysis">사례 분석 입력 칸</label>
-        <textarea id="fieldsAnalysis" style="min-height:180px"></textarea>
-      </div>
-      <div class="field">
-        <label for="fieldsJournal">상담일지 입력 칸</label>
-        <textarea id="fieldsJournal" style="min-height:180px"></textarea>
+        <label for="keyInput">이용 키</label>
+        <input type="password" id="keyInput" placeholder="AIza로 시작하는 키를 붙여넣으세요" autocomplete="off">
+        <div class="key-state" id="keyState"></div>
       </div>
       <div class="row">
-        <button class="btn small" id="saveFields">입력 칸 저장</button>
-        <button class="btn ghost small" id="resetFields">기본값으로 되돌리기</button>
+        <button class="btn small" id="saveKey">저장</button>
+        <button class="btn ghost small" id="removeKey">키 삭제</button>
       </div>
-
-      <div class="section-title">백업</div>
-      <p class="help">내가 고친 설정을 파일로 저장하거나 불러옵니다. (상담 내용은 포함되지 않습니다)</p>
-      <div class="row">
-        <button class="btn ghost small" id="exportBtn">설정 파일로 저장</button>
-        <button class="btn ghost small" id="importBtn">설정 파일 불러오기</button>
-        <button class="btn ghost small" id="resetAll">모든 설정 초기화</button>
-        <input type="file" id="importFile" accept="application/json,.json" class="hidden">
-      </div>
+      <p class="sub" style="margin:16px 0 0">키는 이 브라우저에만 저장되며 다른 곳으로 전송되지 않습니다. 다른 기기에서 쓰려면 그 기기에서도 한 번 등록해 주세요.</p>
     </div>
   </section>
 </div>
@@ -244,55 +244,58 @@
 <script>
 (() => {
   const KEY = 'sangdam-helper:v1';
+  const API_KEY = 'sangdam-helper:apikey';
+  const API = 'https://generativelanguage.googleapis.com/v1beta';
   const $ = (s) => document.querySelector(s);
 
   let manifest = null;
-  const defaults = {};             // id -> 기본 문구
-  let store = loadStore();         // { docs: {id: 문구}, fields: {analysis, journal}, lenses: {analysis: [...], journal: [...]} }
+  const docs = {};                 // id -> 문구
+  let store = load(KEY, {});       // { lenses: {analysis: [...], journal: [...]} }
+  let apiKey = load(API_KEY, '');
+  let models = null;               // 사용할 수 있는 무료 모델 후보 (좋은 순)
   let mode = 'analysis';
-  const drafts = { analysis: {}, journal: {} }; // 입력 내용은 저장하지 않고 화면에만 유지
+  const drafts = { analysis: {}, journal: {} }; // 입력 내용은 저장하지 않음
+  let running = null;              // 진행 중인 요청 취소용
+  let lastText = '';
 
-  function loadStore() {
-    try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; }
+  function load(k, fallback) {
+    try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
   }
-  function saveStore() {
-    try { localStorage.setItem(KEY, JSON.stringify(store)); } catch { toast('이 브라우저에서는 저장이 되지 않습니다'); }
+  function save(k, v) {
+    try { localStorage.setItem(k, JSON.stringify(v)); } catch { toast('이 브라우저에서는 저장이 되지 않습니다'); }
   }
   function toast(msg) {
     const t = $('#toast'); t.textContent = msg; t.classList.add('show');
-    clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove('show'), 1800);
+    clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove('show'), 2000);
   }
-  const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-  const docText = (id) => (store.docs && store.docs[id] != null ? store.docs[id] : defaults[id]);
-  const fieldsFor = (m) => (store.fields && store.fields[m]) || manifest.fields[m];
-  const selectedLenses = (m) => {
-    const saved = store.lenses && store.lenses[m];
-    return saved || manifest.lenses.filter((l) => l[m]).map((l) => l.id);
-  };
+  const selectedLenses = (m) => (store.lenses && store.lenses[m]) || manifest.lenses.filter((l) => l[m]).map((l) => l.id);
 
   async function init() {
     try {
       manifest = await (await fetch('prompts/manifest.json')).json();
-      const docs = [manifest.role, ...manifest.lenses, manifest.formats.analysis, manifest.formats.journal];
-      await Promise.all(docs.map(async (d) => {
+      const all = [manifest.role, ...manifest.lenses, manifest.formats.analysis, manifest.formats.journal];
+      await Promise.all(all.map(async (d) => {
         const res = await fetch('prompts/' + d.file);
         if (!res.ok) throw new Error(d.file);
-        defaults[d.id] = (await res.text()).trim();
+        docs[d.id] = (await res.text()).trim();
       }));
     } catch (e) {
       const el = $('#loadError');
-      el.textContent = '설정 파일을 불러오지 못했습니다. 인터넷 주소(웹)로 열었는지 확인해주세요. (' + e.message + ')';
+      el.textContent = '설정 파일을 불러오지 못했습니다. 잠시 후 새로고침해 주세요. (' + e.message + ')';
       el.classList.remove('hidden');
       return;
     }
     renderWork();
+    updateKeyUI();
+    if (!apiKey) switchTab('settings');
   }
 
-  // ---------- 분석 · 일지 화면 ----------
+  // ---------- 화면 ----------
   function renderWork() {
     $('#formTitle').textContent = mode === 'analysis' ? '내담자 정보' : '회기 키워드';
-    $('#fields').innerHTML = fieldsFor(mode).map((f, i) => `
+    $('#fields').innerHTML = manifest.fields[mode].map((f, i) => `
       <div class="field">
         <label for="f${i}">${esc(f.label)}</label>
         <textarea id="f${i}" data-label="${esc(f.label)}" placeholder="${esc(f.hint || '')}">${esc(drafts[mode][f.label] || '')}</textarea>
@@ -305,8 +308,20 @@
         <span><span class="num">${l.id.slice(0, 2)}</span> <span class="t">${esc(l.title)}</span>
         <div class="d">${esc(l.desc)}</div></span>
       </label>`).join('');
+    $('#runBtn').textContent = mode === 'analysis' ? '사례 분석 바로 만들기' : '상담일지 바로 만들기';
     $('#output').classList.remove('show');
   }
+
+  function switchTab(m) {
+    document.querySelectorAll('.tab').forEach((t) => t.setAttribute('aria-selected', t.dataset.mode === m));
+    const isSettings = m === 'settings';
+    $('#workView').classList.toggle('hidden', isSettings);
+    $('#settingsView').classList.toggle('hidden', !isSettings);
+    if (!isSettings) { mode = m; renderWork(); }
+  }
+  document.querySelectorAll('.tab').forEach((tab) => {
+    tab.onclick = () => { if (manifest) switchTab(tab.dataset.mode); };
+  });
 
   $('#fields').addEventListener('input', (e) => {
     if (e.target.dataset.label) drafts[mode][e.target.dataset.label] = e.target.value;
@@ -315,7 +330,7 @@
   function saveLensSelection() {
     store.lenses = store.lenses || {};
     store.lenses[mode] = [...document.querySelectorAll('#lenses input:checked')].map((i) => i.value);
-    saveStore();
+    save(KEY, store);
   }
   $('#allOn').onclick = () => { document.querySelectorAll('#lenses input').forEach((i) => (i.checked = true)); saveLensSelection(); };
   $('#allOff').onclick = () => { document.querySelectorAll('#lenses input').forEach((i) => (i.checked = false)); saveLensSelection(); };
@@ -324,124 +339,185 @@
     drafts[mode] = {}; renderWork();
   };
 
+  // ---------- 질문문 조립 ----------
   function buildPrompt() {
     const sel = selectedLenses(mode);
     const lenses = manifest.lenses.filter((l) => sel.includes(l.id));
-    const filled = fieldsFor(mode)
+    const filled = manifest.fields[mode]
       .map((f) => [f.label, (drafts[mode][f.label] || '').trim()])
       .filter(([, v]) => v);
     const task = mode === 'analysis' ? '사례 분석' : '상담일지 작성';
     const sep = '\n\n---\n\n';
 
-    let out = `# 요청: ${task}\n\n아래는 [역할과 원칙] → [참고자료] → [출력 양식] → [입력 정보] 순서로 구성되어 있습니다. 끝까지 모두 읽은 뒤 답해주십시오.`;
-    out += sep + docText(manifest.role.id);
+    let out = `# 요청: ${task}\n\n아래는 [참고자료] → [출력 양식] → [입력 정보] 순서로 구성되어 있습니다. 끝까지 모두 읽은 뒤 답해주십시오.`;
     if (lenses.length) {
       out += sep + `# [참고자료] 적용할 이론 (${lenses.length}개)\n\n아래 이론을 **번호 순서대로 하나씩** 적용하십시오. 각 이론의 "확인 질문"을 입력 정보에 빠짐없이 대입하고, 정보가 없어 답할 수 없는 질문은 "정보 부족"으로 표시하십시오.\n\n순서: ` + lenses.map((l) => `${l.id.slice(0, 2)}. ${l.title}`).join(' → ');
-      lenses.forEach((l) => { out += sep + docText(l.id); });
+      lenses.forEach((l) => { out += sep + docs[l.id]; });
     }
-    out += sep + docText(manifest.formats[mode].id);
-    out += sep + `# [입력 정보]\n\n` + (filled.length
-      ? filled.map(([k, v]) => `## ${k}\n${v}`).join('\n\n')
-      : '(입력된 정보 없음)');
-    out += sep + `위 [역할과 원칙]을 지키며, ${lenses.length ? '[참고자료]의 이론을 순서대로 빠짐없이 적용해 ' : ''}[출력 양식]에 맞춰 ${task}을 해주십시오.`;
-    return { text: out, filledCount: filled.length, lensCount: lenses.length };
+    out += sep + docs[manifest.formats[mode].id];
+    out += sep + `# [입력 정보]\n\n` + filled.map(([k, v]) => `## ${k}\n${v}`).join('\n\n');
+    out += sep + `${lenses.length ? '[참고자료]의 이론을 순서대로 빠짐없이 적용해 ' : ''}[출력 양식]에 맞춰 ${task}을 해주십시오. 답변은 한국어 마크다운으로 작성하십시오.`;
+    return { system: docs[manifest.role.id], user: out, filledCount: filled.length };
   }
 
-  $('#buildBtn').onclick = () => {
-    const { text, filledCount, lensCount } = buildPrompt();
-    if (!filledCount && !confirm('입력한 정보가 없습니다. 그래도 만들까요?')) return;
-    $('#outText').value = text;
-    $('#outMeta').textContent = `입력 칸 ${filledCount}개 · 이론 ${lensCount}개 · ${text.length.toLocaleString()}자`;
+  // ---------- 제미나이 호출 ----------
+  async function findModels(key) {
+    const res = await fetch(`${API}/models?pageSize=200&key=${encodeURIComponent(key)}`);
+    if (!res.ok) throw await apiError(res);
+    const list = ((await res.json()).models || [])
+      .filter((m) => (m.supportedGenerationMethods || []).includes('generateContent'))
+      .map((m) => m.name.replace('models/', ''))
+      .filter((n) => /^gemini-/.test(n) && !/(image|tts|audio|live|embedding|vision|robotics|computer)/.test(n));
+    const ver = (n) => parseFloat((n.match(/gemini-(\d+(?:\.\d+)?)/) || [])[1] || 0);
+    const rank = (n) =>
+      n === 'gemini-flash-latest' ? 1000 :
+      /flash$/.test(n) && !/lite/.test(n) ? 500 + ver(n) :
+      n === 'gemini-flash-lite-latest' ? 400 :
+      /flash-lite$/.test(n) ? 300 + ver(n) :
+      /flash/.test(n) && !/lite/.test(n) ? 200 + ver(n) :
+      /flash/.test(n) ? 100 + ver(n) : 0;
+    const picked = list.filter((n) => rank(n) > 0).sort((a, b) => rank(b) - rank(a));
+    if (!picked.length) throw new Error('이 키로 쓸 수 있는 모델을 찾지 못했습니다.');
+    return picked;
+  }
+
+  async function apiError(res) {
+    let msg = '';
+    try { msg = (await res.json()).error?.message || ''; } catch {}
+    const e = new Error(msg || res.statusText);
+    e.status = res.status;
+    return e;
+  }
+
+  function friendlyError(e) {
+    if (e.name === 'AbortError') return '중단했습니다.';
+    if (e.status === 400 && /API key/i.test(e.message)) return '이용 키가 올바르지 않습니다. "처음 설정" 탭에서 키를 다시 확인해 주세요.';
+    if (e.status === 403) return '이 키로는 사용할 수 없습니다. 구글 AI 스튜디오에서 키를 새로 만들어 등록해 주세요.';
+    if (e.status === 429) return '무료 사용량을 잠시 초과했습니다. 1분 뒤에 다시 시도해 주세요. (하루 사용량을 넘었다면 다음 날 오후 4~5시쯤 초기화됩니다)';
+    if (e.status >= 500) return '구글 서버가 잠시 불안정합니다. 조금 뒤 다시 시도해 주세요.';
+    if (e instanceof TypeError) return '인터넷 연결을 확인해 주세요.';
+    return '문제가 생겼습니다: ' + e.message;
+  }
+
+  async function generate(model, prompt, signal, onText) {
+    const res = await fetch(`${API}/models/${model}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal,
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: prompt.system }] },
+        contents: [{ role: 'user', parts: [{ text: prompt.user }] }],
+        generationConfig: { temperature: 0.4 },
+      }),
+    });
+    if (!res.ok) throw await apiError(res);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '', text = '', finish = '';
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n'); buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue;
+        let chunk; try { chunk = JSON.parse(line.slice(5)); } catch { continue; }
+        const cand = chunk.candidates?.[0];
+        const part = (cand?.content?.parts || []).filter((p) => !p.thought).map((p) => p.text || '').join('');
+        if (part) { text += part; onText(text); }
+        if (cand?.finishReason) finish = cand.finishReason;
+        if (chunk.promptFeedback?.blockReason) finish = 'BLOCKED';
+      }
+    }
+    return { text, finish };
+  }
+
+  function render(text) {
+    $('#result').innerHTML = DOMPurify.sanitize(marked.parse(text));
+  }
+  function setStatus(msg, busy) {
+    $('#status').innerHTML = (busy ? '<span class="spinner"></span>' : '') + esc(msg);
+  }
+
+  async function run() {
+    if (!apiKey) { toast('먼저 이용 키를 등록해 주세요'); switchTab('settings'); return; }
+    const prompt = buildPrompt();
+    if (!prompt.filledCount) { toast('내용을 하나 이상 입력해 주세요'); return; }
+
+    running?.abort();
+    const ctrl = new AbortController(); running = ctrl;
     const out = $('#output'); out.classList.add('show');
+    $('#outTitle').textContent = mode === 'analysis' ? '사례 분석 결과' : '상담일지';
+    $('#result').innerHTML = ''; lastText = '';
+    $('#runBtn').disabled = true;
+    setStatus('자료를 읽고 작성하고 있습니다. 1~2분 정도 걸릴 수 있어요.', true);
     out.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-  $('#copyBtn').onclick = async () => {
-    const t = $('#outText');
-    try { await navigator.clipboard.writeText(t.value); }
-    catch { t.select(); document.execCommand('copy'); }
-    toast('복사했습니다. 제미나이에 붙여넣으세요');
-  };
 
-  // ---------- 탭 ----------
-  document.querySelectorAll('.tab').forEach((tab) => {
-    tab.onclick = () => {
-      if (!manifest) return;
-      document.querySelectorAll('.tab').forEach((t) => t.setAttribute('aria-selected', t === tab));
-      mode = tab.dataset.mode;
-      const isSettings = mode === 'settings';
-      $('#workView').classList.toggle('hidden', isSettings);
-      $('#settingsView').classList.toggle('hidden', !isSettings);
-      isSettings ? renderSettings() : renderWork();
-    };
-  });
-
-  // ---------- 설정 ----------
-  const fieldsToText = (arr) => arr.map((f) => f.hint ? `${f.label} | ${f.hint}` : f.label).join('\n');
-  const textToFields = (txt) => txt.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
-    const [label, ...rest] = l.split('|');
-    return { label: label.trim(), hint: rest.join('|').trim() };
-  });
-
-  function renderSettings() {
-    const docs = [manifest.role, ...manifest.lenses, manifest.formats.analysis, manifest.formats.journal];
-    $('#docEditors').innerHTML = docs.map((d) => {
-      const edited = store.docs && store.docs[d.id] != null;
-      return `<details data-id="${d.id}">
-        <summary><span>${d.id.slice(0, 2)}. ${esc(d.title)}${edited ? '<span class="badge">수정됨</span>' : ''}</span></summary>
-        <div class="details-body">
-          <textarea>${esc(docText(d.id))}</textarea>
-          <div class="row" style="margin-top:10px">
-            <button class="btn small" data-act="save">저장</button>
-            <button class="btn ghost small" data-act="reset">기본값으로 되돌리기</button>
-          </div>
-        </div></details>`;
-    }).join('');
-    $('#fieldsAnalysis').value = fieldsToText(fieldsFor('analysis'));
-    $('#fieldsJournal').value = fieldsToText(fieldsFor('journal'));
+    try {
+      if (!models) models = await findModels(apiKey);
+      let result = null, lastErr = null;
+      for (const model of models.slice(0, 4)) {
+        try {
+          result = await generate(model, prompt, ctrl.signal, (t) => { lastText = t; render(t); });
+          break;
+        } catch (e) {
+          lastErr = e;
+          // 사용량 초과나 모델 없음이면 다음 무료 모델로 넘어감
+          if (!(e.status === 429 || e.status === 404 || e.status === 503) || lastText) throw e;
+        }
+      }
+      if (!result) throw lastErr;
+      if (!result.text) throw new Error(result.finish === 'BLOCKED' || result.finish === 'SAFETY'
+        ? '구글의 안전 기준 때문에 답변이 만들어지지 않았습니다. 표현을 조금 바꿔서 다시 시도해 주세요.'
+        : '빈 답변이 돌아왔습니다. 다시 시도해 주세요.');
+      setStatus(result.finish === 'MAX_TOKENS'
+        ? '답변이 길어서 중간에 끊겼습니다. 이론 수를 줄여서 다시 만들어 보세요.'
+        : '완성되었습니다. 내용을 꼭 검토한 뒤 사용해 주세요.', false);
+    } catch (e) {
+      setStatus('', false);
+      if (!lastText) $('#result').innerHTML = `<div class="error-box">${esc(friendlyError(e))}</div>`;
+      else setStatus(friendlyError(e) + ' (여기까지 작성된 내용입니다)', false);
+    } finally {
+      $('#runBtn').disabled = false;
+      if (running === ctrl) running = null;
+    }
   }
 
-  $('#docEditors').addEventListener('click', (e) => {
-    const act = e.target.dataset.act; if (!act) return;
-    const box = e.target.closest('details'); const id = box.dataset.id;
-    store.docs = store.docs || {};
-    if (act === 'save') { store.docs[id] = box.querySelector('textarea').value; toast('저장했습니다'); }
-    if (act === 'reset') {
-      if (!confirm('이 문구를 기본값으로 되돌릴까요?')) return;
-      delete store.docs[id]; toast('기본값으로 되돌렸습니다');
-    }
-    saveStore(); renderSettings();
-    $(`#docEditors details[data-id="${id}"]`).open = true;
-  });
+  $('#runBtn').onclick = run;
+  $('#againBtn').onclick = run;
+  $('#copyBtn').onclick = async () => {
+    if (!lastText) return;
+    try { await navigator.clipboard.writeText(lastText); toast('복사했습니다'); }
+    catch { toast('복사하지 못했습니다. 결과를 직접 드래그해서 복사해 주세요'); }
+  };
 
-  $('#saveFields').onclick = () => {
-    const a = textToFields($('#fieldsAnalysis').value), j = textToFields($('#fieldsJournal').value);
-    if (!a.length || !j.length) return toast('입력 칸이 최소 1개는 있어야 합니다');
-    store.fields = { analysis: a, journal: j }; saveStore(); toast('입력 칸을 저장했습니다');
-  };
-  $('#resetFields').onclick = () => {
-    if (!confirm('입력 칸을 기본값으로 되돌릴까요?')) return;
-    delete store.fields; saveStore(); renderSettings(); toast('기본값으로 되돌렸습니다');
-  };
-  $('#exportBtn').onclick = () => {
-    const blob = new Blob([JSON.stringify(store, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = '상담도우미_설정.json'; a.click();
-    URL.revokeObjectURL(a.href);
-  };
-  $('#importBtn').onclick = () => $('#importFile').click();
-  $('#importFile').onchange = async (e) => {
-    const file = e.target.files[0]; if (!file) return;
+  // ---------- 이용 키 ----------
+  function updateKeyUI(msg, ok) {
+    $('#keyInput').value = apiKey;
+    const st = $('#keyState');
+    st.className = 'key-state ' + (ok === false ? 'bad' : apiKey ? 'ok' : '');
+    st.textContent = msg || (apiKey ? '✓ 등록된 키가 있습니다' : '');
+    $('#runHint').textContent = apiKey ? '' : '먼저 "처음 설정" 탭에서 이용 키를 등록해 주세요';
+  }
+  $('#saveKey').onclick = async () => {
+    const k = $('#keyInput').value.trim();
+    if (!k) return updateKeyUI('키를 붙여넣어 주세요', false);
+    $('#saveKey').disabled = true;
+    $('#keyState').className = 'key-state'; $('#keyState').textContent = '키를 확인하고 있습니다…';
     try {
-      const data = JSON.parse(await file.text());
-      if (typeof data !== 'object' || Array.isArray(data)) throw 0;
-      store = { docs: data.docs, fields: data.fields, lenses: data.lenses };
-      saveStore(); renderSettings(); toast('설정을 불러왔습니다');
-    } catch { toast('올바른 설정 파일이 아닙니다'); }
-    e.target.value = '';
+      models = await findModels(k);
+      apiKey = k; save(API_KEY, k);
+      updateKeyUI('✓ 저장했습니다. 이제 사례 분석이나 상담일지 탭에서 바로 만들 수 있어요', true);
+    } catch (e) {
+      updateKeyUI(friendlyError(e), false);
+      $('#keyInput').value = k;
+    } finally { $('#saveKey').disabled = false; }
   };
-  $('#resetAll').onclick = () => {
-    if (!confirm('내가 고친 모든 설정을 지우고 처음 상태로 되돌릴까요?')) return;
-    store = {}; saveStore(); renderSettings(); toast('초기화했습니다');
+  $('#removeKey').onclick = () => {
+    if (!confirm('저장된 키를 지울까요?')) return;
+    apiKey = ''; models = null;
+    try { localStorage.removeItem(API_KEY); } catch {}
+    updateKeyUI('키를 삭제했습니다');
   };
 
   init();
