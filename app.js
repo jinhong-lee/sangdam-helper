@@ -251,7 +251,6 @@ function listHTML(list, showClient) {
         <div class="item-preview">${esc(plain(r.result).slice(0, 160)) || '(아직 결과 없음)'}</div>
       </div>
       <div class="item-actions">
-        <button class="btn ghost small" data-copy="${r.id}" title="결과를 클립보드에 복사">복사</button>
         <button class="btn ghost small" data-dup="${r.id}" title="같은 내용으로 새 기록 만들기">복제</button>
         <button class="btn danger small" data-del="${r.id}">삭제</button>
       </div>
@@ -262,7 +261,6 @@ function bindList() {
   $('#main').querySelectorAll('[data-open]').forEach((el) => {
     el.onclick = (e) => { if (!e.target.closest('button')) location.hash = '#/r/' + el.dataset.open; };
   });
-  $('#main').querySelectorAll('[data-copy]').forEach((b) => { b.onclick = () => copyText(records.find((r) => r.id === b.dataset.copy).result); });
   $('#main').querySelectorAll('[data-dup]').forEach((b) => { b.onclick = () => duplicate(b.dataset.dup); });
   $('#main').querySelectorAll('[data-del]').forEach((b) => { b.onclick = () => removeRecord(b.dataset.del); });
 }
@@ -381,7 +379,7 @@ function renderEditor() {
         <span class="dirty" id="dirtyMark"></span>
       </div>
       <div class="row">
-        ${e.id ? '<button class="btn ghost small" id="dupBtn">복제</button><button class="btn danger small" id="delBtn">삭제</button>' : ''}
+        ${e.id ? '<button class="btn danger small" id="delBtn">삭제</button>' : ''}
       </div>
     </div>`;
 
@@ -410,10 +408,6 @@ function renderEditor() {
   };
   $('#saveBtn').onclick = () => saveEditor(false);
   if (e.id) {
-    $('#dupBtn').onclick = async () => {
-      if (e.dirty) await saveEditor(true);
-      duplicate(e.id);
-    };
     $('#delBtn').onclick = () => removeRecord(e.id);
   }
 }
@@ -498,7 +492,7 @@ function buildPrompt() {
 
 // ---------- 제미나이 호출 ----------
 async function findModels(key) {
-  const res = await fetch(`${GEMINI}/models?pageSize=200&key=${encodeURIComponent(key)}`);
+  const res = await fetch(`${GEMINI}/models?pageSize=200`, { headers: { 'x-goog-api-key': key } });
   if (!res.ok) throw await apiError(res);
   const list = ((await res.json()).models || [])
     .filter((m) => (m.supportedGenerationMethods || []).includes('generateContent'))
@@ -536,9 +530,9 @@ function friendlyError(e) {
 }
 
 async function generate(model, prompt, signal, onText) {
-  const res = await fetch(`${GEMINI}/models/${model}:streamGenerateContent?alt=sse&key=${encodeURIComponent(profile.geminiKey)}`, {
+  const res = await fetch(`${GEMINI}/models/${model}:streamGenerateContent?alt=sse`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': profile.geminiKey },
     signal,
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: prompt.system }] },
