@@ -300,6 +300,7 @@ function viewClient(id) {
       <div class="row">
         <a class="btn soft h32" href="#/new/${id}/journal">+ 상담일지</a>
         <a class="btn soft h32" href="#/new/${id}/analysis">+ 사례 분석</a>
+        <button class="btn ghost h32" id="importBtn">회기 메모 가져오기</button>
       </div>
     </div>
     <div class="stack">
@@ -317,6 +318,7 @@ function viewClient(id) {
     toast('메모를 저장했습니다');
   };
   $('#moreBtn').onclick = () => toggleMenu($('#moreBtn'));
+  $('#importBtn').onclick = () => openImport(id);
   const closeMenu = closeMenus;
   $('#renameBtn').onclick = async () => {
     closeMenu();
@@ -427,6 +429,284 @@ async function duplicate(id) {
   records.unshift({ id: ref.id, ...data });
   toast('복제했습니다');
   location.hash = '#/r/' + ref.id;
+}
+
+// ---------- 회기 메모 한꺼번에 가져오기 ----------
+const MEMO_FIELD = '회기 메모';
+// "3회기 10월 3일 오후 4시" 같은 머리줄에서 회기 번호·날짜·시간을 읽음
+const HEADER_RE = /^\s*[\[(#*\-•▶]*\s*(?:(\d{1,3})\s*회기|회기\s*(\d{1,3}))/;
+function parseHeader(line) {
+  const hm = line.match(HEADER_RE) || line.match(/(\d{1,3})\s*회기|회기\s*(\d{1,3})/);
+  const n = hm ? +(hm[1] || hm[2]) : null;
+  let rest = hm ? line.replace(hm[0], ' ') : line;
+  const now = new Date();
+  let y = null, mo = null, d = null, h = null, mi = 0;
+  let m = rest.match(/(\d{4})\s*[.\-/년]\s*(\d{1,2})\s*[.\-/월]\s*(\d{1,2})\s*일?/);
+  if (m) { y = +m[1]; mo = +m[2]; d = +m[3]; rest = rest.replace(m[0], ' '); }
+  else if ((m = rest.match(/(\d{1,2})\s*월\s*(\d{1,2})\s*일?/) || rest.match(/(?<![\d:])(\d{1,2})\s*[/.]\s*(\d{1,2})(?![\d:])/))) {
+    mo = +m[1]; d = +m[2]; rest = rest.replace(m[0], ' ');
+  }
+  const t = rest.match(/(오전|오후|AM|PM|am|pm)?\s*(\d{1,2})\s*(?:시|:)\s*(?:(\d{1,2})\s*분?)?/);
+  if (t) {
+    h = +t[2]; mi = +(t[3] || 0);
+    const ap = (t[1] || '').toLowerCase();
+    if ((ap === '오후' || ap === 'pm') && h < 12) h += 12;
+    else if (!ap && h >= 1 && h <= 8) h += 12;   // 오전/오후 없이 1~8시면 오후로 봄 (미리보기에서 고칠 수 있음)
+  }
+  let ts = null;
+  if (mo && d && mo <= 12 && d <= 31) {
+    if (!y) { y = now.getFullYear(); if (new Date(y, mo - 1, d) - now > 30 * 864e5) y -= 1; }   // 연도 없으면 올해(미래면 작년)
+    ts = new Date(y, mo - 1, d, h ?? 0, h != null ? mi : 0).getTime();
+  }
+  return { n, ts, hasTime: h != null };
+}
+function stampOf(ts, withTime) {
+  const d = new Date(ts), p2 = (x) => String(x).padStart(2, '0');
+  return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}` + (withTime ? ` ${p2(d.getHours())}:${p2(d.getMinutes())}` : '');
+}
+function sessionTitle(n, ts, hasTime) {
+  return [n ? `${n}회기` : '', ts ? stampOf(ts, hasTime) : ''].filter(Boolean).join(' · ') || '회기 메모';
+}
+function splitByRule(text) {
+  const lines = text.replace(/\r/g, '').split('\n');
+  const out = []; let cur = null, before = 0;
+  for (const line of lines) {
+    if (HEADER_RE.test(line)) {
+      const h = parseHeader(line);
+      const extra = line.replace(HEADER_RE, '').replace(/(\d{4}\s*[.\-/년]\s*)?\d{1,2}\s*(월|[/.])\s*\d{1,2}\s*일?/, '').replace(/(오전|오후|AM|PM|am|pm)?\s*\d{1,2}\s*(시|:)\s*(\d{1,2}\s*분?)?/, '').replace(/^[\s,·:\-)\]]+/, '').trim();
+      cur = { title: sessionTitle(h.n, h.ts, h.hasTime), body: extra ? [extra] : [] };
+      out.push(cur);
+    } else if (cur) cur.body.push(line);
+    else if (line.trim()) before++;
+  }
+  return { sessions: out.map((s) => ({ title: s.title, content: s.body.join('\n').trim() })).filter((s) => s.content || s.title), before };
+}
+async function aiJSON(system, user, signal) {
+  if (!models) models = await findModels(profile.geminiKey);
+  let lastErr;
+  for (const model of models.slice(0, 4)) {
+    try {
+      const res = await fetch(`${GEMINI}/models/${model}:generateContent`, {
+        method: 'POST', signal,
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': profile.geminiKey },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents: [{ role: 'user', parts: [{ text: user }] }],
+          generationConfig: { temperature: 0, responseMimeType: 'application/json' },
+        }),
+      });
+      if (!res.ok) throw await apiError(res);
+      const j = await res.json();
+      const text = (j.candidates?.[0]?.content?.parts || []).filter((x) => !x.thought).map((x) => x.text || '').join('');
+      return JSON.parse(text);
+    } catch (err) {
+      lastErr = err;
+      if (!(err.status === 429 || err.status === 404 || err.status === 503)) throw err;
+    }
+  }
+  throw lastErr;
+}
+async function splitByAI(text, signal) {
+  const arr = await aiJSON(
+    '너는 상담 메모를 회기별로 나누는 도우미다. 반드시 JSON 배열만 출력한다.',
+    `아래 메모를 회기(상담 1회) 단위로 나눠라.\n- 각 항목: {"session": 회기 번호(숫자, 없으면 null), "date": "YYYY-MM-DD" 또는 null, "time": "HH:MM"(24시간) 또는 null, "content": 그 회기의 내용}\n- content는 원문 그대로 옮기고 요약하거나 고치지 마라. 머리줄(회기·날짜·시간)은 content에서 뺀다.\n- 연도가 없으면 ${new Date().getFullYear()}년으로 본다.\n\n[메모]\n${text}`,
+    signal,
+  );
+  return (Array.isArray(arr) ? arr : []).map((x) => {
+    let ts = null;
+    if (x.date && /^\d{4}-\d{2}-\d{2}$/.test(x.date)) {
+      const [y, mo, d] = x.date.split('-').map(Number);
+      const [h, mi] = (x.time && /^\d{1,2}:\d{2}$/.test(x.time) ? x.time : '0:0').split(':').map(Number);
+      ts = new Date(y, mo - 1, d, h, mi).getTime();
+    }
+    return { title: sessionTitle(x.session, ts, !!x.time), content: String(x.content || '').trim() };
+  }).filter((s) => s.content);
+}
+async function generateText(prompt, signal) {
+  if (!models) models = await findModels(profile.geminiKey);
+  let lastErr;
+  for (const model of models.slice(0, 4)) {
+    try {
+      const r = await generate(model, prompt, signal, () => {});
+      if (!r.text) throw new Error('빈 답변이 돌아왔습니다');
+      return r.text;
+    } catch (err) {
+      lastErr = err;
+      if (!(err.status === 429 || err.status === 404 || err.status === 503)) throw err;
+    }
+  }
+  throw lastErr;
+}
+
+function openImport(clientId) {
+  const opener = document.activeElement;
+  const lensIds = prefs.lenses_journal || manifest.lenses.filter((l) => l.journal).map((l) => l.id);
+  const lensNames = manifest.lenses.filter((l) => lensIds.includes(l.id)).map((l) => l.title);
+  let sessions = [], busy = false, ctrl = null;
+  const back = document.createElement('div');
+  back.className = 'modal-back';
+  back.innerHTML = `<div class="modal modal-lg" role="dialog" aria-modal="true" aria-labelledby="iTitle"></div>`;
+  document.body.appendChild(back);
+  const box = back.querySelector('.modal');
+  const close = () => { if (busy) return; document.removeEventListener('keydown', onKey); back.remove(); opener?.focus?.(); };
+  const onKey = (ev) => { if (ev.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  back.onclick = (ev) => { if (ev.target === back) close(); };
+
+  // 1단계: 붙여넣기
+  const step1 = (text = '') => {
+    box.innerHTML = `
+      <div class="modal-body">
+        <h3 id="iTitle">회기 메모 가져오기</h3>
+        <p class="sub">메모장이나 한글 파일에 적어둔 여러 회기를 한꺼번에 붙여넣으세요. 회기마다 상담일지 기록이 하나씩 만들어집니다.</p>
+        <textarea id="iText" rows="12" placeholder="1회기 10월 3일 오후 4시&#10;클레이 처음 만짐, 손끝만 대다가 점점 손바닥 전체&#10;&#10;2회기 10월 10일 오후 4시&#10;모래상자에 울타리 여러 겹, '괴물이 못 들어와'">${esc(text)}</textarea>
+        <p class="hint-line">각 회기 첫 줄은 <b>"N회기"</b>로 시작해 주세요. 날짜·시간은 같은 줄에 적으면 자동으로 읽습니다. <label class="link-btn file-link">메모장 파일(.txt) 불러오기<input type="file" id="iFile" accept=".txt,text/plain" hidden></label></p>
+        <div class="error-box" id="iErr" hidden></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" data-cancel>취소</button>
+        <button class="btn" id="iSplit">회기별로 나누기</button>
+      </div>`;
+    const ta = box.querySelector('#iText');
+    box.querySelector('[data-cancel]').onclick = close;
+    box.querySelector('#iFile').onchange = async (ev) => { const f = ev.target.files[0]; if (f) ta.value = await f.text(); };
+    box.querySelector('#iSplit').onclick = () => {
+      const t = ta.value.trim();
+      if (!t) return showErr('메모를 붙여넣어 주세요.');
+      const r = splitByRule(t);
+      if (!r.sessions.length) return showErr('"N회기"로 시작하는 줄을 찾지 못했어요. 형식이 다르면 아래 [AI로 나누기]를 눌러주세요.', t);
+      sessions = r.sessions; step2(t, r.before);
+    };
+    ta.focus();
+  };
+  const showErr = (msg, text) => {
+    const e = box.querySelector('#iErr');
+    e.hidden = false;
+    e.innerHTML = esc(msg) + (text ? ' <button class="link-btn" id="iAI">AI로 나누기</button>' : '');
+    if (text) box.querySelector('#iAI').onclick = () => runAISplit(text);
+  };
+  const runAISplit = async (text) => {
+    if (!profile.geminiKey) { toast('AI로 나누려면 설정에서 AI 이용 키를 먼저 등록해 주세요'); return; }
+    busy = true; ctrl = new AbortController();
+    box.innerHTML = `<div class="modal-body"><h3 id="iTitle">회기 메모 가져오기</h3>
+      <div class="status"><span class="spinner"></span>AI가 회기별로 나누고 있어요. 10~30초 정도 걸려요.</div></div>`;
+    try {
+      sessions = await splitByAI(text, ctrl.signal);
+      busy = false;
+      if (!sessions.length) { step1(text); return showErr('AI도 회기를 나누지 못했어요. 각 회기 첫 줄을 "N회기"로 맞춰서 다시 시도해 주세요.'); }
+      step2(text, 0, true);
+    } catch (err) { busy = false; step1(text); showErr(friendlyError(err)); }
+  };
+
+  // 2단계: 미리보기·수정
+  const step2 = (text, before, byAI) => {
+    const existing = clientRecords(clientId).filter((r) => r.type === 'journal').map((r) => (r.title.match(/^(\d+)회기/) || [])[1]).filter(Boolean);
+    box.innerHTML = `
+      <div class="modal-body">
+        <h3 id="iTitle">${sessions.length}개 회기로 나눴어요</h3>
+        <p class="sub">제목과 내용을 확인하고 고칠 수 있어요. 가져오지 않을 회기는 체크를 해제하세요.${byAI ? ' (AI가 나눈 결과입니다)' : ''}</p>
+        ${before ? `<p class="hint-line warn">첫 "N회기" 줄 앞에 있던 ${before}줄은 가져오지 않습니다.</p>` : ''}
+        <div class="imp-list">${sessions.map((s, i) => {
+          const n = (s.title.match(/^(\d+)회기/) || [])[1];
+          const dup = n && existing.includes(n);
+          return `<div class="imp-row" data-i="${i}">
+            <input type="checkbox" class="imp-check" ${dup ? '' : 'checked'} aria-label="이 회기 가져오기">
+            <div class="imp-main">
+              <input type="text" class="imp-title" value="${esc(s.title)}" aria-label="제목">
+              <textarea class="imp-body" rows="3" aria-label="내용">${esc(s.content)}</textarea>
+              ${dup ? `<p class="hint-line warn">이미 ${n}회기 기록이 있어서 체크를 해제했어요.</p>` : ''}
+            </div>
+            <span class="imp-status" aria-live="polite"></span>
+          </div>`;
+        }).join('')}</div>
+        <label class="check modal-hist">
+          <input type="checkbox" id="iAuto" ${profile.geminiKey ? '' : 'disabled'}>
+          <span>가져온 뒤 상담일지까지 자동으로 만들기
+            <small>${profile.geminiKey ? `회기당 30초~1분 걸려요. 적용 이론: ${lensNames.length ? esc(lensNames.join(', ')) : '없음'} (마지막으로 고른 설정)` : '설정에서 AI 이용 키를 등록하면 쓸 수 있어요'}</small>
+          </span>
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" id="iBack">다시 붙여넣기</button>
+        <button class="btn" id="iGo"></button>
+      </div>`;
+    const rows = () => [...box.querySelectorAll('.imp-row')];
+    const sync = () => {
+      const n = rows().filter((r) => r.querySelector('.imp-check').checked).length;
+      const auto = box.querySelector('#iAuto').checked;
+      const go = box.querySelector('#iGo');
+      go.disabled = !n;
+      go.textContent = n ? (auto ? `${n}개 가져와서 일지까지 만들기` : `${n}개 기록으로 가져오기`) : '가져올 회기를 선택하세요';
+    };
+    box.querySelector('.imp-list').onchange = sync;
+    box.querySelector('#iAuto').onchange = sync;
+    box.querySelector('#iBack').onclick = () => step1(text);
+    box.querySelector('#iGo').onclick = () => doImport();
+    sync();
+  };
+
+  // 3단계: 저장 (+ 일지 생성)
+  const doImport = async () => {
+    const auto = box.querySelector('#iAuto').checked;
+    const picked = [...box.querySelectorAll('.imp-row')].filter((r) => r.querySelector('.imp-check').checked).map((r) => {
+      const title = r.querySelector('.imp-title').value.trim() || '회기 메모';
+      const h = parseHeader(title);
+      return { row: r, title, content: r.querySelector('.imp-body').value.trim(), ts: h.ts };
+    });
+    busy = true; ctrl = new AbortController();
+    box.querySelectorAll('input, textarea').forEach((x) => (x.disabled = true));
+    box.querySelector('.modal-actions').innerHTML = `<span class="sub" id="iProg" style="margin:0 auto 0 0"></span><button class="btn ghost" id="iStop">${auto ? '중단' : ''}</button>`;
+    const stop = box.querySelector('#iStop'); if (!auto) stop.remove(); else stop.onclick = () => ctrl.abort();
+    const prog = (t) => { box.querySelector('#iProg').textContent = t; };
+    const created = [];
+    // 오래된 회기부터 저장해야 이전 기록 참고가 순서대로 됨
+    picked.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+    try {
+      for (const [i, s] of picked.entries()) {
+        prog(`기록 저장 중… ${i + 1}/${picked.length}`);
+        const t0 = s.ts || Date.now() - (picked.length - i) * 1000;
+        const data = { clientId, type: 'journal', title: s.title, inputs: { [MEMO_FIELD]: s.content }, lenses: lensIds, useHistory: true, result: '', createdAt: t0, updatedAt: Date.now() };
+        const ref = await addDoc(userCol('records'), data);
+        records.unshift({ id: ref.id, ...data });
+        created.push({ id: ref.id, ...data, row: s.row });
+        s.row.querySelector('.imp-status').textContent = auto ? '대기' : '✓ 저장';
+      }
+      renderNav();
+      if (auto) {
+        let ok = 0;
+        for (const [i, r] of created.entries()) {
+          if (ctrl.signal.aborted) break;
+          const st = r.row.querySelector('.imp-status');
+          st.innerHTML = '<span class="spinner"></span>'; prog(`상담일지 만드는 중… ${i + 1}/${created.length}`);
+          let tries = 0;
+          for (;;) {
+            try {
+              const text = await generateText(buildPrompt(r), ctrl.signal);
+              await updateDoc(userDoc('records', r.id), { result: text, updatedAt: Date.now() });
+              Object.assign(records.find((x) => x.id === r.id), { result: text, updatedAt: Date.now() });
+              st.textContent = '✓ 완료'; ok++;
+              break;
+            } catch (err) {
+              if (err.name === 'AbortError') { st.textContent = '중단'; break; }
+              if (err.status === 429 && tries++ < 2) { prog('무료 사용량 제한으로 30초 기다렸다가 이어서 만들어요…'); await new Promise((res) => setTimeout(res, 30000)); continue; }
+              st.textContent = '실패'; st.title = friendlyError(err);
+              break;
+            }
+          }
+        }
+        prog(`기록 ${created.length}개를 가져오고, 상담일지 ${ok}개를 만들었어요.` + (ok < created.length ? ' 못 만든 회기는 기록을 열어 [상담일지 만들기]를 눌러주세요.' : ''));
+      } else prog(`기록 ${created.length}개를 가져왔어요.`);
+    } catch (err) {
+      prog('저장하지 못했습니다: ' + friendlyError(err));
+    }
+    busy = false;
+    box.querySelector('.modal-actions').insertAdjacentHTML('beforeend', '<button class="btn" id="iDone">확인</button>');
+    box.querySelector('#iStop')?.remove();
+    box.querySelector('#iDone').onclick = () => { close(); route(); };
+    box.querySelector('#iDone').focus();
+  };
+
+  step1();
 }
 
 // ---------- 기록 내보내기 ----------
@@ -754,8 +1034,7 @@ async function doSave(e, silent) {
 }
 
 // ---------- 질문문 조립 ----------
-function buildPrompt() {
-  const e = editor;
+function buildPrompt(e = editor) {
   const lenses = manifest.lenses.filter((l) => e.lenses.includes(l.id));
   const filled = manifest.fields[e.type]
     .map((f) => [f.label, (e.inputs[f.label] || '').trim()])
