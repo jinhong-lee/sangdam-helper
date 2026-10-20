@@ -262,7 +262,7 @@ function viewClient(id) {
     viewClient(id); renderNav();
   };
   $('#delClientBtn').onclick = async () => {
-    if (!confirm(`"${c.name}"와 기록 ${list.length}건을 모두 삭제할까요? 되돌릴 수 없습니다.`)) return;
+    if (!(await confirmDelete('아동 삭제', `"${c.name}"와 이 아동의 기록 ${list.length}건을 모두 삭제합니다.`))) return;
     const batch = writeBatch(db);
     list.forEach((r) => batch.delete(userDoc('records', r.id)));
     batch.delete(userDoc('clients', id));
@@ -335,9 +335,45 @@ async function duplicate(id) {
   location.hash = '#/r/' + ref.id;
 }
 
+// 삭제 확인 모달: 입력칸에 "삭제"를 적어야 삭제 버튼이 눌림
+function confirmDelete(title, message) {
+  return new Promise((resolve) => {
+    const opener = document.activeElement;
+    const back = document.createElement('div');
+    back.className = 'modal-back';
+    back.innerHTML = `
+      <div class="modal modal-sm" role="alertdialog" aria-modal="true" aria-labelledby="dTitle" aria-describedby="dMsg">
+        <div class="modal-body">
+          <h3 id="dTitle">${esc(title)}</h3>
+          <p class="sub" id="dMsg">${esc(message)}<br><b>삭제하면 되돌릴 수 없습니다.</b></p>
+          <label class="field" style="margin:0">
+            <span class="del-label">확인을 위해 아래 칸에 <b>삭제</b>라고 입력해 주세요.</span>
+            <input type="text" id="dInput" autocomplete="off" aria-label="삭제라고 입력">
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button class="btn ghost" data-cancel>취소</button>
+          <button class="btn btn-delete" data-ok disabled>삭제</button>
+        </div>
+      </div>`;
+    document.body.appendChild(back);
+    const input = back.querySelector('#dInput');
+    const ok = back.querySelector('[data-ok]');
+    const done = (v) => { document.removeEventListener('keydown', onKey); back.remove(); opener?.focus?.(); resolve(v); };
+    const onKey = (ev) => { if (ev.key === 'Escape') done(false); };
+    document.addEventListener('keydown', onKey);
+    input.oninput = () => { ok.disabled = input.value.trim() !== '삭제'; };
+    input.onkeydown = (ev) => { if (ev.key === 'Enter' && !ok.disabled) done(true); };
+    ok.onclick = () => done(true);
+    back.querySelector('[data-cancel]').onclick = () => done(false);
+    back.onclick = (ev) => { if (ev.target === back) done(false); };
+    input.focus();
+  });
+}
+
 async function removeRecord(id) {
   const r = records.find((x) => x.id === id);
-  if (!confirm(`"${r.title}" 기록을 삭제할까요? 되돌릴 수 없습니다.`)) return;
+  if (!(await confirmDelete('기록 삭제', `"${r.title}" 기록을 삭제합니다.`))) return;
   await deleteDoc(userDoc('records', id));
   records = records.filter((x) => x.id !== id);
   toast('삭제했습니다');
