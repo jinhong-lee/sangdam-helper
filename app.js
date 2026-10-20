@@ -185,12 +185,14 @@ function renderNav() {
       </div>`;
     }).join('')}
     ${q && !groups.length ? '<div class="nav-empty">검색 결과가 없습니다</div>' : ''}
-    ${q ? '' : '<a href="#" data-add-client style="color:var(--primary)">+ 아동 추가</a>'}`;
-  $('#nav [data-add-client]')?.addEventListener('click', (e) => { e.preventDefault(); addClient(); });
+`;
   $('#nav').querySelectorAll('[data-tw]').forEach((b) => {
     b.onclick = () => { navToggled.set(b.dataset.tw, b.getAttribute('aria-expanded') !== 'true'); renderNav(); };
   });
 }
+
+// 아동 추가 (왼쪽 메뉴 맨 위)
+$('#navAddClient').onclick = addClient;
 
 // 검색창
 const navSearch = $('#navSearch');
@@ -289,7 +291,7 @@ function viewHome() {
     return;
   }
   $('#main').innerHTML = `
-    <div class="page-head" style="align-items:center"><h2>전체 기록</h2><button class="btn h32" id="homeAddClient">+ 아동 추가</button></div>
+    <div class="page-head"><h2>전체 기록</h2></div>
     ${profile.geminiKey ? '' : '<div class="card" style="margin-bottom:16px">결과를 만들려면 먼저 AI 이용 키를 등록해 주세요. <a href="#/settings">설정으로 가기</a></div>'}
     ${records.length ? listHTML(records, true) : `
       <div class="card empty">
@@ -297,7 +299,6 @@ function viewHome() {
         왼쪽에서 아동을 골라 첫 기록을 만들거나, 새 아동을 추가해 보세요.
         <div style="margin-top:18px"><button class="btn ghost" id="emptyAddClient">+ 아동 추가</button></div>
       </div>`}`;
-  $('#homeAddClient').onclick = addClient;
   $('#emptyAddClient')?.addEventListener('click', addClient);
   bindList();
 }
