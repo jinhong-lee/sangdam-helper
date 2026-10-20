@@ -4,8 +4,10 @@
 
 | 구분 | 위치 | 상태 |
 |---|---|---|
-| 지금 공개 중인 버전 | `main` 브랜치 → https://jinhong-lee.github.io/sangdam-helper/ | ✅ 사용 가능 (키워드 입력 → 결과 바로 생성, 저장 기능 없음) |
-| 새 버전 (로그인·기록 관리) | `feature/login` 브랜치 | ⏸️ 완성, 시험 완료. **Firebase 연결 대기 중** |
+| 지금 공개 중인 버전 | `main` 브랜치 → https://jinhong-lee.github.io/sangdam-helper/ | ✅ 농지 도우미 (구글 로그인, 아동별 기록 관리, 결과 바로 생성) |
+| 개발용 브랜치 | `feature/login` | main과 동일. 다음 기능 개발 시 여기서 작업 후 합치기 |
+
+> Firebase 로그인 허용 도메인: `localhost`, `jinhong-lee.github.io` (Authentication → 설정 → 승인된 도메인)
 
 ## 지금까지 한 일
 
