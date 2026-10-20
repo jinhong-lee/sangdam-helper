@@ -290,8 +290,8 @@ function viewClient(id) {
         </div>
       </div>
       <div class="row">
-        <a class="btn soft" href="#/new/${id}/journal">+ 상담일지</a>
-        <a class="btn soft" href="#/new/${id}/analysis">+ 사례 분석</a>
+        <a class="btn soft h32" href="#/new/${id}/journal">+ 상담일지</a>
+        <a class="btn soft h32" href="#/new/${id}/analysis">+ 사례 분석</a>
       </div>
     </div>
     <div class="stack">
