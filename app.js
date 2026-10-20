@@ -10,6 +10,7 @@ import { firebaseConfig } from './firebase-config.js';
 const GEMINI = 'https://generativelanguage.googleapis.com/v1beta';
 const PREFS = 'sangdam-helper:prefs';
 const TYPE = { analysis: '사례 분석', journal: '상담일지' };
+const SHORT = { analysis: '사례', journal: '일지' }; // 다시 만들기 버튼용 짧은 이름
 const HISTORY_COUNT = 3;
 
 const $ = (s) => document.querySelector(s);
@@ -423,7 +424,7 @@ function renderEditor() {
         <span class="dirty" id="dirtyMark"></span>
         ${e.id ? '<button class="btn danger small" id="delBtn">삭제</button>' : ''}
         <button class="btn ghost" id="saveBtn">저장</button>
-        <button class="btn" id="runBtn">${e.result ? '다시 만들기' : TYPE[e.type] + ' 만들기'}</button>
+        <button class="btn" id="runBtn">${e.result ? SHORT[e.type] + ' 다시 만들기' : TYPE[e.type] + ' 만들기'}</button>
       </div>
     </div>
 
@@ -484,7 +485,7 @@ function openRunModal() {
   back.innerHTML = `
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
       <div class="modal-body">
-        <h3 id="mTitle">${TYPE[e.type]} ${e.result ? '다시 ' : ''}만들기</h3>
+        <h3 id="mTitle">${e.result ? SHORT[e.type] + ' 다시 만들기' : TYPE[e.type] + ' 만들기'}</h3>
         <p class="sub">적용할 이론을 고르세요. 하나도 고르지 않으면 이론 없이 입력 내용만으로 작성합니다.</p>
         <div class="row" style="margin:-4px 0 6px"><button class="link-btn" data-all>모두 선택</button><button class="link-btn" data-none>모두 해제</button></div>
         <div id="mLenses">${manifest.lenses.map((l) => `
