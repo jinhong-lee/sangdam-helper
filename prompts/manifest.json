@@ -1,0 +1,37 @@
+{
+  "role": { "id": "00_role", "file": "00_role.md", "title": "역할과 기본 원칙" },
+  "lenses": [
+    { "id": "01_developmental", "file": "01_developmental.md", "title": "발달심리학", "desc": "연령 기대 수준, 애착, 그림 발달", "analysis": true, "journal": false },
+    { "id": "02_somatic_trauma", "file": "02_somatic_trauma.md", "title": "신체기반 트라우마", "desc": "인내의 창, 각성, 신체 반응", "analysis": true, "journal": true },
+    { "id": "03_sensorimotor_art", "file": "03_sensorimotor_art.md", "title": "감각운동 미술치료", "desc": "매체의 저항감·유동성, 손의 움직임", "analysis": true, "journal": true },
+    { "id": "04_gestalt", "file": "04_gestalt.md", "title": "게슈탈트", "desc": "지금-여기, 접촉, 자기감", "analysis": true, "journal": false },
+    { "id": "05_analytical", "file": "05_analytical.md", "title": "분석심리학", "desc": "상징, 그림자, 모래놀이", "analysis": true, "journal": false },
+    { "id": "06_expressive_arts", "file": "06_expressive_arts.md", "title": "표현예술·미술·놀이치료", "desc": "ETC, 작품 형식, 놀이 주제", "analysis": true, "journal": true },
+    { "id": "07_medical", "file": "07_medical.md", "title": "의학·신경발달", "desc": "감별 가능성, 감각처리, 의뢰", "analysis": true, "journal": false },
+    { "id": "08_relationship", "file": "08_relationship.md", "title": "치료관계·슈퍼비전", "desc": "전이·역전이, 동맹", "analysis": true, "journal": false }
+  ],
+  "formats": {
+    "analysis": { "id": "90_analysis_format", "file": "90_analysis_format.md", "title": "출력 양식 – 사례 분석" },
+    "journal": { "id": "91_journal_format", "file": "91_journal_format.md", "title": "출력 양식 – 상담일지" }
+  },
+  "fields": {
+    "analysis": [
+      { "label": "기본 정보", "hint": "예) A아동, 8세, 남, 초2 (실명·학교명 제외)" },
+      { "label": "의뢰 사유 · 주호소", "hint": "예) 학교에서 친구를 때림, 수업 중 자리 이탈" },
+      { "label": "발달력 · 가족력", "hint": "예) 언어 발달 다소 늦음, 4세 때 부모 이혼, 현재 모와 거주" },
+      { "label": "행동 관찰", "hint": "예) 첫 회기 입실 시 문 앞에서 머뭇거림, 점토를 세게 내려침" },
+      { "label": "검사 결과", "hint": "예) K-CBCL 외현화 상승, HTP 집 작게 그림" },
+      { "label": "회기 내용 · 작품", "hint": "예) 모래상자에 울타리를 여러 겹 침, '괴물이 못 들어와'" },
+      { "label": "치료자의 고민 · 질문", "hint": "예) 제한 설정을 할 때마다 아이가 무너져서 어디까지 허용할지 고민" }
+    ],
+    "journal": [
+      { "label": "회기 정보", "hint": "예) 5회기, 2026-10-20" },
+      { "label": "회기 목표", "hint": "예) 감정 표현 촉진, 신체 조절 경험" },
+      { "label": "활동 · 매체", "hint": "예) 클레이필드, 물 추가" },
+      { "label": "관찰 키워드", "hint": "예) 처음엔 손끝만, 점점 손바닥 전체, 숨 크게 쉼, 웃음" },
+      { "label": "아동의 말", "hint": "예) 미끌미끌해, 엄마 손 같아" },
+      { "label": "치료자 개입", "hint": "예) 움직임 반영, 속도 맞춰줌" },
+      { "label": "특이사항 · 보호자 상담", "hint": "예) 모: 이번 주 야경증 2회" }
+    ]
+  }
+}
