@@ -562,6 +562,65 @@ async function generate(model, prompt, signal, onText) {
   return { text, finish };
 }
 
+// ---------- 진행률 ----------
+// 출력 양식 문서에서 "단계"를 읽어, 생성 중인 글에 어느 단계까지 나왔는지로 진행률을 계산합니다.
+// 사례 분석: "## 1. 사례 요약" 같은 번호 제목 (3번 이론별 분석은 선택한 이론 수만큼 나눔)
+// 상담일지: 양식 표의 항목 이름 + 덧붙일 것 항목
+const norm = (t) => t.replace(/[\s\-–—·:()（）*_|#]/g, '');
+function milestones(type) {
+  const doc = docs[manifest.formats[type].id] || '';
+  const heads = [...doc.matchAll(/^##\s*(\d+)\.\s*(.+)$/gm)].map((m) => ({ num: +m[1], title: m[2].trim() }));
+  if (heads.length) return { kind: 'heads', items: heads };
+  const rows = [...doc.matchAll(/^\|\s*([^|]+?)\s*\|/gm)].map((m) => m[1]).filter((t) => !/^-+$/.test(t) && t !== '항목');
+  const extras = [...doc.matchAll(/^\d+\.\s*\*\*(.+?)\*\*/gm)].map((m) => m[1]);
+  return { kind: 'rows', items: [...rows, ...extras].map((t) => ({ title: t, key: norm(t) })) };
+}
+function progressOf(type, text, lensCount) {
+  const ms = milestones(type);
+  if (!ms.items.length) return null;
+  if (ms.kind === 'heads') {
+    const L = Math.max(1, lensCount);
+    const total = ms.items.length - 1 + L;            // 이론별 분석 = 이론 수만큼
+    const nums = [...text.matchAll(/^(?:#{1,4}\s*\**|\*\*)\s*(\d{1,2})\s*[.)]/gm)].map((m) => +m[1]).filter((n) => n <= ms.items.length);
+    const n = nums.length ? Math.max(...nums) : 0;
+    if (!n) return { done: 0, total, label: '작성 시작' };
+    const lensIdx = ms.items.findIndex((h) => /이론/.test(h.title)) + 1 || 3;
+    let done, label = `${n}. ${ms.items[n - 1].title}`;
+    if (n < lensIdx) done = n - 1;
+    else if (n === lensIdx) {
+      const after = text.slice(text.search(new RegExp(`^(?:#{1,4}\\s*\\**|\\*\\*)\\s*${n}\\s*[.)]`, 'm')));
+      const k = Math.min(L, Math.max(1, (after.match(/주목할\s*지점/g) || []).length));
+      done = lensIdx - 1 + (k - 1);
+      if (lensCount > 1) label += ` (${k}/${L})`;
+    } else done = lensIdx - 1 + L + (n - lensIdx - 1);
+    return { done: done + 0.5, total, label };
+  }
+  const flat = norm(text);
+  // 가장 뒤 항목이 나왔으면 그 앞은 지난 것으로 봄 (AI가 항목 하나를 빠뜨리거나 이름을 바꿔도 멈추지 않게)
+  let k = 0;
+  ms.items.forEach((it, i) => { if (flat.includes(it.key)) k = i + 1; });
+  return { done: Math.max(0, k - 0.5), total: ms.items.length, label: k ? ms.items[k - 1].title : '작성 시작' };
+}
+function showProgress(p, secs) {
+  const s = $('#status'); if (!s) return;
+  const t = secs ? ` · ${secs}초` : '';
+  if (!p) {
+    s.innerHTML = `<div class="progress"><div class="pbar"><div class="pfill indet"></div></div>
+      <div class="pmeta"><span class="step">자료를 읽고 구상하고 있어요${t}</span></div></div>`;
+    return;
+  }
+  const pct = Math.min(97, Math.round(p.done / p.total * 100));
+  let bar = s.querySelector('.pfill:not(.indet)');
+  if (!bar) {
+    s.innerHTML = `<div class="progress"><div class="pbar"><div class="pfill" style="width:0%"></div></div>
+      <div class="pmeta"><span class="step"></span><b></b></div></div>`;
+    bar = s.querySelector('.pfill');
+  }
+  bar.style.width = pct + '%';
+  s.querySelector('.step').textContent = p.label + ' 작성 중' + t;
+  s.querySelector('.pmeta b').textContent = pct + '%';
+}
+
 function setStatus(msg, busy) {
   const s = $('#status'); if (!s) return;
   s.innerHTML = (busy ? '<span class="spinner"></span>' : '') + esc(msg);
@@ -583,7 +642,12 @@ async function run() {
   const before = e.result;
   let partial = '';
   $('#result').innerHTML = '';
-  setStatus('자료를 읽고 작성하고 있습니다. 1~2분 정도 걸릴 수 있어요.', true);
+  const lensCount = (e.lenses || []).length;
+  const started = Date.now();
+  let prog = null;
+  const secs = () => Math.round((Date.now() - started) / 1000);
+  showProgress(null, 0);
+  const tick = setInterval(() => { if (editor === e) showProgress(prog, secs()); }, 1000);
   $('#outCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   try {
@@ -594,6 +658,7 @@ async function run() {
         result = await generate(model, prompt, ctrl.signal, (t) => {
           if (editor !== e) return;
           partial = t; $('#result').innerHTML = DOMPurify.sanitize(marked.parse(t));
+          prog = progressOf(e.type, t, lensCount) || prog; showProgress(prog, secs());
         });
         break;
       } catch (err) {
@@ -624,6 +689,7 @@ async function run() {
       $('#result').innerHTML = `<div class="error-box">${esc(friendlyError(err))}</div>`;
     }
   } finally {
+    clearInterval(tick);
     if (running === ctrl) running = null;
     const btn = $('#runBtn'); if (btn) btn.disabled = false;
   }

@@ -159,6 +159,15 @@
   .status:not(:empty) { margin-bottom: 14px; }
   .spinner { width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite; flex-shrink: 0; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  .progress { flex: 1; min-width: 0; }
+  .pbar { height: 8px; background: var(--surface-2); border-radius: 99px; overflow: hidden; }
+  .pfill { height: 100%; background: var(--primary); border-radius: 99px; transition: width .5s ease; }
+  .pfill.indet { width: 28%; animation: indet 1.3s ease-in-out infinite; }
+  @keyframes indet { from { transform: translateX(-100%); } to { transform: translateX(360%); } }
+  .pmeta { display: flex; justify-content: space-between; gap: 12px; margin-top: 8px; font-size: 13px; color: var(--text-2); }
+  .pmeta b { color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .pmeta .step { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  @media (prefers-reduced-motion: reduce) { .pfill { transition: none; } .pfill.indet { animation: none; width: 100%; opacity: .35; } }
   .result { font-size: 14.5px; line-height: 1.75; overflow-wrap: anywhere; }
   .result h1, .result h2, .result h3 { line-height: 1.4; margin: 1.4em 0 .5em; }
   .result h1 { font-size: 19px; } .result h2 { font-size: 17px; } .result h3 { font-size: 15.5px; }
