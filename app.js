@@ -549,7 +549,7 @@ async function generateText(prompt, signal) {
   throw lastErr;
 }
 
-function renderBulk(host, clientId, { text, onBack, onSaved, excludeId }) {
+function renderBulk(host, clientId, { text, onBack, onSaved, excludeId, autoGen }) {
   const lensIds = prefs.lenses_journal || manifest.lenses.filter((l) => l.journal).map((l) => l.id);
   const lensNames = manifest.lenses.filter((l) => lensIds.includes(l.id)).map((l) => l.title);
   let sessions = [], busy = false, ctrl = null;
@@ -601,7 +601,7 @@ function renderBulk(host, clientId, { text, onBack, onSaved, excludeId }) {
           </div>`;
         }).join('')}</div>
         <label class="check modal-hist">
-          <input type="checkbox" id="iAuto" ${profile.geminiKey ? '' : 'disabled'}>
+          <input type="checkbox" id="iAuto" ${profile.geminiKey ? (autoGen ? 'checked' : '') : 'disabled'}>
           <span>저장하고 상담일지 내용까지 AI로 생성
             <small>${profile.geminiKey ? `회기당 30초~1분 걸려요. 적용 이론: ${lensNames.length ? esc(lensNames.join(', ')) : '없음'} (마지막으로 고른 설정)` : '설정에서 AI 이용 키를 등록하면 쓸 수 있어요'}</small>
           </span>
@@ -815,7 +815,7 @@ function defaultTitle(clientId, type) {
 const MODES = { sentence: '문장으로 쓰기', fields: '항목별로 쓰기' };
 const freeField = (type) => manifest.fields[type].find((f) => f.free);
 const modeFields = (type, mode) => manifest.fields[type].filter((f) => (mode === 'sentence' ? f.free : !f.free));
-const OLD_FREE = { journal: '회기 메모', analysis: '사례 메모' };   // 예전 칸 이름 → 새 이름으로 옮김
+const OLD_FREE = { journal: ['회기 메모', '오늘 회기 내용'], analysis: ['사례 메모'] };   // 예전 칸 이름 → 새 이름으로 옮김
 function inferMode(src) {
   if (src.mode) return src.mode;
   const inp = src.inputs || {};
@@ -836,8 +836,8 @@ function openEditor(src) {
     title: src.title || defaultTitle(src.clientId, type),
     inputs: (() => {
       const inp = { ...(src.inputs || {}) };
-      const oldK = OLD_FREE[type], newK = freeField(type)?.label;
-      if (oldK && newK && inp[oldK] && !inp[newK]) { inp[newK] = inp[oldK]; delete inp[oldK]; }
+      const newK = freeField(type)?.label;
+      (OLD_FREE[type] || []).forEach((oldK) => { if (newK && inp[oldK] && !inp[newK]) inp[newK] = inp[oldK]; delete inp[oldK]; });
       return inp;
     })(),
     mode: null,
@@ -864,24 +864,26 @@ function renderEditorBody() {
       onBack: () => { e.splitting = false; renderEditor(); },
       onSaved: () => discardDraft(e),
       excludeId: e.id,
+      autoGen: e.splitAuto,
     });
     return;
   }
   const sentence = e.mode === 'sentence';
+  const autoTitle = sentence && e.type === 'journal';   // 상담일지 문장 쓰기는 제목을 내용 첫 줄(N회기·날짜)에서 자동으로 만듦
   host.innerHTML = `
     <p class="sub">${sentence
-      ? (e.type === 'journal' ? '오늘 회기에 있었던 일을 편하게 문장으로 적으세요. AI가 상담일지 양식에 맞춰 항목별로 정리합니다.' : '아동과 사례에 대해 아는 내용을 편하게 문장으로 적으세요. AI가 항목별로 나눠 분석합니다.')
+      ? (e.type === 'journal' ? '회기마다 첫 줄에 "N회기 날짜 시간"을 적고 내용을 이어서 쓰세요. 지난 회기까지 여러 개를 한꺼번에 넣으면 회기별 상담일지로 나눠 저장됩니다.' : '아동과 사례에 대해 아는 내용을 편하게 문장으로 적으세요. AI가 항목별로 나눠 분석합니다.')
       : '아는 항목만 키워드나 짧은 문장으로 적으세요. 빈 칸은 건너뜁니다.'}</p>
-    <div class="field">
+    ${autoTitle ? '' : `<div class="field">
       <label for="title">제목</label>
       <input type="text" id="title" value="${esc(e.title)}">
-    </div>
+    </div>`}
     ${modeFields(e.type, e.mode).map((f, i) => `
       <div class="field">
         <label for="f${i}">${esc(f.label)}</label>
         <textarea id="f${i}" class="${f.free ? 'free' : ''}" data-label="${esc(f.label)}" placeholder="${esc(f.hint || '')}">${esc(e.inputs[f.label] || '')}</textarea>
       </div>`).join('')}`;
-  $('#title').oninput = (ev) => { e.title = ev.target.value; markDirty(true); };
+  if ($('#title')) $('#title').oninput = (ev) => { e.title = ev.target.value; markDirty(true); };
   host.querySelectorAll('textarea[data-label]').forEach((t) => {
     t.oninput = () => { e.inputs[t.dataset.label] = t.value; markDirty(true); if (t.classList.contains('free')) updateSplitHint(); };
   });
@@ -897,16 +899,30 @@ function updateSplitHint() {
   const e = editor, el = $('#splitHint'); if (!e || !el) return;
   const n = sessionCount(e);
   el.className = 'split-hint' + (n >= 2 ? ' on' : '');
+  const t = (e.inputs[freeField('journal').label] || '').trim();
   el.innerHTML = n >= 2
-    ? `<span>📋 <b>${n}개 회기</b>가 들어 있어요. 회기별로 나누면 상담일지가 ${n}개 만들어져요.</span><button class="btn h32" id="splitBtn">회기별로 나눠 저장</button>`
-    : '<span>여러 회기를 한꺼번에 붙여넣었나요?</span><button class="link-btn" id="splitBtn">회기별로 나누기</button>';
-  $('#splitBtn').onclick = () => startSplit();
+    ? `<span>📋 <b>${n}개 회기</b>가 들어 있어요. 저장하거나 생성하면 회기별 상담일지 ${n}개로 나눠집니다.</span>`
+    : (t && n === 0 && t.length > 200 ? '<span>회기 표시("N회기") 없이 여러 회기를 넣었나요?</span><button class="link-btn" id="splitBtn">AI로 회기 나누기</button>' : '');
+  $('#splitBtn')?.addEventListener('click', () => startSplit(false));
 }
-function startSplit() {
+function startSplit(autoGen) {
   const e = editor;
   if (!(e.inputs[freeField('journal').label] || '').trim()) return toast('먼저 내용을 적거나 붙여넣어 주세요');
-  e.splitting = true;
+  e.splitting = true; e.splitAuto = !!autoGen;
   renderEditor();
+}
+// 회기가 하나면 첫 줄의 "N회기 날짜 시간"으로 제목을 만듦
+function applyAutoTitle(e) {
+  if (!(e.type === 'journal' && e.mode === 'sentence')) return;
+  const r = splitByRule((e.inputs[freeField('journal').label] || '').trim());
+  if (r.sessions.length === 1 && /회기/.test(r.sessions[0].title)) e.title = r.sessions[0].title;
+}
+// 저장 버튼: 여러 회기면 바로 회기별 미리보기로
+function onSaveClick() {
+  const e = editor;
+  if (canSplit(e) && sessionCount(e) >= 2) return startSplit(false);
+  applyAutoTitle(e);
+  saveEditor(false);
 }
 // 나눠 저장한 뒤, 문장 칸 내용이 자동 저장되며 생긴 원본 기록은 지움 (같은 내용이 두 번 남지 않게)
 async function discardDraft(e) {
@@ -969,7 +985,7 @@ function renderEditor() {
   });
 
   $('#runBtn').onclick = openRunModal;
-  $('#saveBtn').onclick = () => saveEditor(false);
+  $('#saveBtn').onclick = onSaveClick;
   $('#copyBtn').onclick = () => copyText(e.result);
   $('#editResultBtn').onclick = () => {
     if (e.editingResult) e.result = $('#resultEdit').value;
@@ -985,14 +1001,8 @@ async function openRunModal() {
   const e = editor;
   if (!profile.geminiKey) { toast('먼저 설정에서 AI 이용 키를 등록해 주세요'); location.hash = '#/settings'; return; }
   if (!buildPrompt().filledCount) return toast('내용을 하나 이상 입력해 주세요');
-  if (canSplit(e)) {
-    const n = sessionCount(e);
-    if (n >= 2) {
-      const pick = await confirmModal({ title: `${n}개 회기가 들어 있어요`, message: '회기별로 나눠 각각 상담일지로 저장할까요? 전체를 하나의 상담일지로 생성하려면 [하나로 생성]을 누르세요.', okLabel: '회기별로 나누기', cancelLabel: '하나로 생성' });
-      if (pick === null) return;
-      if (pick) return startSplit();
-    }
-  }
+  if (canSplit(e) && sessionCount(e) >= 2) return startSplit(true);   // 여러 회기면 묻지 않고 회기별 미리보기로(내용 생성 체크된 상태)
+  applyAutoTitle(e);
   const prevCount = clientRecords(e.clientId).filter((r) => r.id !== e.id && r.result).length;
   const opener = document.activeElement;
   const back = document.createElement('div');
