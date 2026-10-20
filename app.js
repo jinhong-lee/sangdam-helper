@@ -847,6 +847,7 @@ function openEditor(src) {
     createdAt: src.createdAt || null,
     dirty: false,
     editingResult: false,
+    editing: !src.id,          // 저장된 기록은 읽기 화면으로 열고, [수정]을 눌러야 편집
   };
   editor.mode = inferMode({ ...src, inputs: editor.inputs });
   renderEditor();
@@ -922,7 +923,7 @@ function onSaveClick() {
   const e = editor;
   if (canSplit(e) && sessionCount(e) >= 2) return startSplit(false);
   applyAutoTitle(e);
-  saveEditor(false);
+  saveEditor(false).then(() => { if (editor === e && !e.dirty) { e.editing = false; renderEditor(); } }).catch(() => {});
 }
 // 나눠 저장한 뒤, 문장 칸 내용이 자동 저장되며 생긴 원본 기록은 지움 (같은 내용이 두 번 남지 않게)
 async function discardDraft(e) {
@@ -935,6 +936,56 @@ async function discardDraft(e) {
 }
 
 function renderEditor() {
+  if (editor.editing) renderEditForm(); else renderReadView();
+}
+
+// ---------- 읽기 화면 (저장된 기록) ----------
+function renderReadView() {
+  const e = editor;
+  const fields = modeFields(e.type, e.mode).filter((f) => (e.inputs[f.label] || '').trim());
+  $('#main').innerHTML = `
+    <div class="page-head editor-head">
+      <div>
+        <a class="back" href="#/c/${e.clientId}">← ${esc(clientName(e.clientId))}</a>
+        <div class="eyebrow">${TYPE[e.type]} · ${fmtDate(e.createdAt)} 작성</div>
+      </div>
+      <div class="row head-actions">
+        <button class="btn danger small" id="delBtn">삭제</button>
+        <button class="btn h32" id="editBtn">수정</button>
+        <button class="btn h32" id="runBtn">${e.result ? SHORT[e.type] + ' 다시 생성' : '+ ' + TYPE[e.type] + ' 생성'}</button>
+      </div>
+    </div>
+
+    <h2 class="read-title">${esc(e.title)}</h2>
+
+    <div class="card ${e.result ? '' : 'hidden'}" id="outCard">
+      <div class="out-head">
+        <h3>${TYPE[e.type]}</h3>
+        <div class="row"><button class="btn small" id="copyBtn">복사</button></div>
+      </div>
+      <div class="status" id="status"></div>
+      <div class="result" id="result"></div>
+    </div>
+    ${e.result ? '' : `<div class="card empty" style="margin-bottom:18px"><b>아직 생성된 ${TYPE[e.type]}이 없어요</b>오른쪽 위 [+ ${TYPE[e.type]} 생성]을 누르면 아래 내용으로 만들어 드려요.</div>`}
+
+    <div class="card read-inputs" style="margin-top:18px">
+      <div class="out-head"><h3>입력한 내용</h3><span class="sub" style="margin:0">${MODES[e.mode] || ''}</span></div>
+      ${fields.length ? fields.map((f) => `
+        <div class="read-field">
+          ${e.mode === 'sentence' ? '' : `<div class="read-label">${esc(f.label)}</div>`}
+          <div class="read-value">${esc(e.inputs[f.label])}</div>
+        </div>`).join('') : '<p class="sub" style="margin:0">입력한 내용이 없습니다.</p>'}
+    </div>`;
+  e.editingResult = false;
+  renderResult();
+  $('#editBtn').onclick = () => { e.editing = true; renderEditor(); };
+  $('#runBtn').onclick = openRunModal;
+  $('#copyBtn').onclick = () => copyText(e.result);
+  $('#delBtn').onclick = () => removeRecord(e.id);
+}
+
+// ---------- 편집 화면 ----------
+function renderEditForm() {
   const e = editor;
   $('#main').innerHTML = `
     <div class="page-head editor-head">
@@ -944,7 +995,7 @@ function renderEditor() {
       </div>
       <div class="row head-actions">
         <span class="save-state" id="dirtyMark" aria-live="polite"></span>
-        ${e.id ? '<button class="btn danger small" id="delBtn">삭제</button>' : ''}
+        ${e.id ? '<button class="btn ghost h32" id="cancelBtn">취소</button>' : ''}
         <button class="btn h32" id="saveBtn" disabled>내용 저장</button>
         <button class="btn h32" id="runBtn">${e.result ? SHORT[e.type] + ' 다시 생성' : '+ ' + TYPE[e.type] + ' 생성'}</button>
       </div>
@@ -993,7 +1044,17 @@ function renderEditor() {
     $('#editResultBtn').textContent = e.editingResult ? '수정 완료' : '직접 수정';
     renderResult();
   };
-  if (e.id) $('#delBtn').onclick = () => removeRecord(e.id);
+  if (e.id) $('#cancelBtn').onclick = cancelEdit;
+}
+// 수정 취소: 바꾼 게 있으면 버릴지 묻고, 저장된 내용으로 되돌려 읽기 화면으로
+async function cancelEdit() {
+  const e = editor;
+  if (e.dirty) {
+    const ok = await confirmModal({ title: '수정한 내용을 버릴까요?', message: '저장하지 않은 수정 내용은 사라집니다.', okLabel: '버리기', cancelLabel: '계속 수정', danger: true });
+    if (!ok) return;
+  }
+  const saved = records.find((r) => r.id === e.id);
+  openEditor(saved);
 }
 
 // ---------- 만들기 전 이론 선택 모달 (만들 때마다, 다시 만들 때도 항상 띄움) ----------
@@ -1305,8 +1366,9 @@ async function run() {
   running?.abort();
   const ctrl = new AbortController(); running = ctrl;
   e.editingResult = false;
-  $('#editResultBtn').textContent = '직접 수정';
+  const erb = $('#editResultBtn'); if (erb) erb.textContent = '직접 수정';
   $('#outCard').classList.remove('hidden');
+  document.querySelector('#main .card.empty')?.remove();
   $('#runBtn').disabled = true;
   const before = e.result;
   let partial = '';
@@ -1344,6 +1406,7 @@ async function run() {
     e.result = result.text;
     e.dirty = true; e.rev = (e.rev || 0) + 1;   // 결과는 반드시 저장되도록 표시
     await saveEditor(true);
+    e.editing = false;
     renderEditor();
     setStatus(result.finish === 'MAX_TOKENS'
       ? '답변이 길어서 중간에 끊겼습니다. 이론 수를 줄여서 다시 만들어 보세요. (자동 저장됨)'
