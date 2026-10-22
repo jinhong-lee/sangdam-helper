@@ -4,7 +4,7 @@
 
 | 구분 | 위치 | 상태 |
 |---|---|---|
-| 지금 공개 중인 버전 | `main` 브랜치 → https://jinhong-lee.github.io/sangdam-helper/ | ✅ 농지 도우미 (구글 로그인, 아동별 기록 관리, 결과 바로 생성) |
+| 지금 공개 중인 버전 | `main` 브랜치 → https://jinhong-lee.github.io/sangdam-helper/ | ✅ 농지니 (구글 로그인, 아동별 기록 관리, 결과 바로 생성) |
 | 개발용 브랜치 | `feature/login` | main과 동일. 다음 기능 개발 시 여기서 작업 후 합치기 |
 
 > 관리자: leejjinhong@gmail.com (app.js ADMINS + firestore.rules isAdmin 둘 다 수정해야 함)
@@ -56,3 +56,4 @@
 
 - 친구분이 실제로 쓰는 **상담일지 칸 이름** → `prompts/manifest.json`, `prompts/91_journal_format.md` 수정
 - 실제 Gemini 결과 품질 확인 (지금까지는 가짜 응답으로만 시험함)
+| 2026-10-22 | 서비스명 "농지 도우미" → "농지니"로 변경 (탭 제목, 로그인 화면, 상단 로고, OG 태그·OG 이미지, 내보내기 파일명 `농지니_기록_…`) |

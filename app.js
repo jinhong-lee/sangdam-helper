@@ -831,7 +831,7 @@ function exportRecords(kind) {
     type = 'application/json';
   } else {
     const line = '='.repeat(40);
-    body = `농지 도우미 기록 · ${nowStamp()} 내보냄\n내담자 ${clients.length}명 · 기록 ${records.length}건\n`;
+    body = `농지니 기록 · ${nowStamp()} 내보냄\n내담자 ${clients.length}명 · 기록 ${records.length}건\n`;
     clients.forEach((c) => {
       body += `\n${line}\n[내담자] ${c.name}\n${c.memo ? '내담자 메모: ' + c.memo + '\n' : ''}${line}\n`;
       clientRecords(c.id).slice().sort((a, b) => a.createdAt - b.createdAt).forEach((r) => {
@@ -844,7 +844,7 @@ function exportRecords(kind) {
   }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([body], { type: type + ';charset=utf-8' }));
-  a.download = `농지도우미_기록_${stamp}.${kind}`;
+  a.download = `농지니_기록_${stamp}.${kind}`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   toast('파일을 저장했습니다');
