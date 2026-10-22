@@ -20,6 +20,9 @@ const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fmtDate = (ts) => new Date(ts).toLocaleString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 const fmtDay = (ts) => new Date(ts).toLocaleDateString('ko-KR');
+// 기록의 날짜 표시: createdAt은 정렬용(여러 회기 저장 시 회기 날짜), writtenAt은 실제 작성 시각, editedAt은 사람이 [내용 저장]으로 고친 시각.
+// AI 생성·다시 생성은 수정으로 치지 않음. 예전 기록(writtenAt 없음)은 마지막 저장 시각(updatedAt)으로 표시.
+const recDate = (r) => r.editedAt ? `${fmtDate(r.editedAt)} (수정)` : fmtDate(r.writtenAt || r.updatedAt || r.createdAt);
 const plain = (md) => (md || '').replace(/[#*|>`_-]+/g, ' ').replace(/\s+/g, ' ').trim();
 
 function toast(msg) {
@@ -131,7 +134,7 @@ async function askUnsaved(actionLabel) {
   if (!editor?.dirty) return true;
   const pick = await confirmModal({ title: '저장하지 않은 내용이 있어요', message: `${actionLabel} 전에 저장할까요? 저장하지 않으면 지금 적은 내용이 사라집니다.`, okLabel: `저장하고 ${actionLabel}`, cancelLabel: `저장 안 하고 ${actionLabel}` });
   if (pick === null) return false;
-  if (pick) { try { await saveEditor(true); } catch { return false; } }
+  if (pick) { try { await saveEditor(true, true); } catch { return false; } }
   else if (editor) editor.dirty = false;
   return true;
 }
@@ -163,7 +166,7 @@ window.addEventListener('beforeunload', (e) => {
 });
 // Cmd/Ctrl+S로 즉시 저장
 document.addEventListener('keydown', (ev) => {
-  if ((ev.metaKey || ev.ctrlKey) && ev.key === 's' && editor) { ev.preventDefault(); editor.dirty = true; saveEditor(false); }
+  if ((ev.metaKey || ev.ctrlKey) && ev.key === 's' && editor) { ev.preventDefault(); editor.dirty = true; saveEditor(false, true); }
 });
 function setHashSilently(h) { history.replaceState(null, '', h); lastHash = h; }
 
@@ -405,7 +408,7 @@ function listHTML(list, showClient) {
     <div class="item" data-open="${r.id}">
       <div class="item-body">
         <div class="item-title"><span class="tag ${r.type}">${TYPE[r.type]}</span>${esc(r.title)}</div>
-        <div class="item-meta">${showClient ? esc(clientName(r.clientId)) + ' · ' : ''}${fmtDate(r.createdAt)}${r.updatedAt - r.createdAt > 60000 ? ' · 수정됨' : ''}</div>
+        <div class="item-meta">${showClient ? esc(clientName(r.clientId)) + ' · ' : ''}${recDate(r)}</div>
         <div class="item-preview">${esc(plain(r.result).slice(0, 160)) || '(아직 결과 없음)'}</div>
       </div>
       <div class="more">
@@ -453,7 +456,8 @@ async function copyText(text) {
 async function duplicate(id) {
   const src = records.find((r) => r.id === id);
   const { id: _, ...rest } = src;
-  const data = { ...rest, title: src.title + ' (복사본)', createdAt: Date.now(), updatedAt: Date.now() };
+  const data = { ...rest, title: src.title + ' (복사본)', createdAt: Date.now(), writtenAt: Date.now(), updatedAt: Date.now() };
+  delete data.editedAt;
   const ref = await addDoc(userCol('records'), data);
   records.unshift({ id: ref.id, ...data });
   toast('복제했습니다');
@@ -664,7 +668,7 @@ function renderBulk(host, clientId, { text, onBack, onSaved, excludeId, autoGen 
       for (const [i, s] of picked.entries()) {
         prog(`기록 저장 중… ${i + 1}/${picked.length}`);
         const t0 = s.ts || Date.now() - (picked.length - i) * 1000;
-        const data = { clientId, type: 'journal', title: s.title, inputs: { [freeLabel()]: s.content }, mode: 'sentence', lenses: lensIds, useHistory: true, result: '', createdAt: t0, updatedAt: Date.now() };
+        const data = { writtenAt: Date.now(), clientId, type: 'journal', title: s.title, inputs: { [freeLabel()]: s.content }, mode: 'sentence', lenses: lensIds, useHistory: true, result: '', createdAt: t0, updatedAt: Date.now() };
         const ref = await addDoc(userCol('records'), data);
         records.unshift({ id: ref.id, ...data });
         created.push({ id: ref.id, ...data, row: s.row });
@@ -792,7 +796,7 @@ async function viewAdmin(uid) {
       const inputs = Object.entries(r.inputs || {}).filter(([, v]) => (v || '').trim());
       return `<details class="admin-rec">
         <summary><span class="ktag ${r.type}">${r.type === 'journal' ? '일지' : '분석'}</span><b>${esc(r.title || '')}</b>
-          <span class="sub" style="margin:0">${fmtDate(r.createdAt)} · ${MODES[r.mode] || '방식 기록 없음'}${r.result ? '' : ' · 결과 없음'}</span></summary>
+          <span class="sub" style="margin:0">${recDate(r)} · ${MODES[r.mode] || '방식 기록 없음'}${r.result ? '' : ' · 결과 없음'}</span></summary>
         <div class="admin-rec-body">
           <h4>입력한 내용</h4>
           ${inputs.length ? inputs.map(([k, v]) => `<div class="read-field"><div class="read-label">${esc(k)}</div><div class="read-value">${esc(v)}</div></div>`).join('') : '<p class="sub">없음</p>'}
@@ -831,7 +835,7 @@ function exportRecords(kind) {
     clients.forEach((c) => {
       body += `\n${line}\n[내담자] ${c.name}\n${c.memo ? '내담자 메모: ' + c.memo + '\n' : ''}${line}\n`;
       clientRecords(c.id).slice().sort((a, b) => a.createdAt - b.createdAt).forEach((r) => {
-        body += `\n▶ [${TYPE[r.type]}] ${r.title} (작성 ${fmtDate(r.createdAt)})\n\n■ 입력 내용\n`;
+        body += `\n▶ [${TYPE[r.type]}] ${r.title} (${recDate(r)})\n\n■ 입력 내용\n`;
         Object.entries(r.inputs || {}).filter(([, v]) => (v || '').trim()).forEach(([k, v]) => { body += `- ${k}: ${v.trim()}\n`; });
         body += `\n■ 결과\n${(r.result || '(아직 결과 없음)').trim()}\n\n${'-'.repeat(40)}\n`;
       });
@@ -1050,12 +1054,13 @@ function onSaveClick() {
   const e = editor;
   if (canSplit(e) && sessionCount(e) >= 2) return startSplit(false);
   applyAutoTitle(e);
-  saveEditor(false).then(() => { if (editor === e && !e.dirty) { e.editing = false; renderEditor(); } }).catch(() => {});
+  saveEditor(false, true).then(() => { if (editor === e && !e.dirty) { e.editing = false; renderEditor(); } }).catch(() => {});
 }
 // 나눠 저장한 뒤, 문장 칸 내용이 자동 저장되며 생긴 원본 기록은 지움 (같은 내용이 두 번 남지 않게)
 async function discardDraft(e) {
   clearTimeout(autoT);
   await saveChain;
+  e.dirty = false;                       // 나눠 저장했으니 원본 입력은 '저장 안 됨'으로 남기지 않음
   if (!e.id) return;
   try { await deleteDoc(userDoc('records', e.id)); } catch {}
   records = records.filter((r) => r.id !== e.id);
@@ -1074,7 +1079,7 @@ function renderReadView() {
     <div class="page-head editor-head">
       <div>
         <a class="back" href="#/c/${e.clientId}">← ${esc(clientName(e.clientId))}</a>
-        <div class="eyebrow">${TYPE[e.type]} · ${fmtDate(e.createdAt)} 작성</div>
+        <div class="eyebrow">${TYPE[e.type]}</div>
       </div>
       <div class="row head-actions">
         <button class="btn danger small" id="delBtn">삭제</button>
@@ -1084,6 +1089,7 @@ function renderReadView() {
     </div>
 
     <h2 class="read-title">${esc(e.title)}</h2>
+    <p class="read-meta">${recDate(records.find((r) => r.id === e.id) || e)}</p>
 
     <div class="card ${e.result ? '' : 'hidden'}" id="outCard">
       <div class="out-head">
@@ -1129,7 +1135,7 @@ function renderEditForm() {
     <div class="page-head editor-head">
       <div>
         <a class="back" href="#/c/${e.clientId}">← ${esc(clientName(e.clientId))}</a>
-        <div class="eyebrow">${TYPE[e.type]}${e.createdAt ? ' · ' + fmtDate(e.createdAt) + ' 작성' : ' · 새 기록'}</div>
+        <div class="eyebrow">${TYPE[e.type]} · ${e.id ? '수정 중' : '새 기록'}</div>
       </div>
       <div class="row head-actions">
         <span class="save-state" id="dirtyMark" aria-live="polite"></span>
@@ -1280,7 +1286,7 @@ function setSaveState(e, state) {
   m.className = 'save-state ' + state;
   m.innerHTML = { idle: '', dirty: '저장 안 됨', saving: '저장 중…', saved: '✓ 저장됨', error: '저장 실패 · <button class="link-btn" id="retrySave">다시 시도</button>' }[state] || '';
   const sb = $('#saveBtn'); if (sb) sb.disabled = !(state === 'dirty' || state === 'error');
-  if (state === 'error') $('#retrySave').onclick = () => saveEditor(true);
+  if (state === 'error') $('#retrySave').onclick = () => saveEditor(true, true);
 }
 function markDirty(on) {
   const e = editor; if (!e) return;
@@ -1289,14 +1295,14 @@ function markDirty(on) {
   e.rev = (e.rev || 0) + 1;
   setSaveState(e, 'dirty');
 }
-function saveEditor(silent = true) {
+function saveEditor(silent = true, byUser = false) {
   const e = editor; if (!e) return Promise.resolve();
   clearTimeout(autoT);
-  const p = saveChain.then(() => doSave(e, silent));
+  const p = saveChain.then(() => doSave(e, silent, byUser));
   saveChain = p.catch(() => {});
   return p;
 }
-async function doSave(e, silent) {
+async function doSave(e, silent, byUser) {
   if (!e.dirty && e.id) return;            // 이미 저장된 상태
   if (editor === e && e.editingResult) { const t = $('#resultEdit'); if (t) e.result = t.value; }
   const rev = e.rev || 0;
@@ -1304,13 +1310,14 @@ async function doSave(e, silent) {
     clientId: e.clientId, type: e.type, title: e.title.trim() || defaultTitle(e.clientId, e.type),
     inputs: e.inputs, mode: e.mode, lenses: e.lenses, useHistory: e.useHistory, result: e.result, updatedAt: Date.now(),
   };
+  if (e.id && byUser) data.editedAt = Date.now();   // 저장된 기록을 사람이 고쳐 저장한 경우만 "수정"
   setSaveState(e, 'saving');
   try {
     if (e.id) {
       await updateDoc(userDoc('records', e.id), data);
       Object.assign(records.find((r) => r.id === e.id) || {}, data);
     } else {
-      data.createdAt = Date.now();
+      data.createdAt = data.writtenAt = Date.now();
       const ref = await addDoc(userCol('records'), data);
       e.id = ref.id; e.createdAt = data.createdAt;
       records.unshift({ id: ref.id, ...data });
