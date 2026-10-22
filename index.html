@@ -162,6 +162,17 @@
   .split-hint { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; font-size: 12.5px; color: var(--text-2); }
   .split-hint.on { justify-content: space-between; padding: 10px 12px; border-radius: 10px; background: var(--primary-soft); color: var(--text); font-size: 13.5px; }
   .split-hint .btn { background: var(--surface); color: var(--primary); }
+  .table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+  .admin-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .admin-table th { text-align: left; font-size: 12px; color: var(--text-2); font-weight: 700; padding: 10px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .admin-table td { padding: 12px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .admin-table tr:last-child td { border-bottom: 0; }
+  .admin-client { margin-bottom: 14px; }
+  .admin-client h3 { display: flex; gap: 8px; align-items: baseline; margin-bottom: 10px; }
+  .admin-rec { border-top: 1px solid var(--border); }
+  .admin-rec summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 0; cursor: pointer; }
+  .admin-rec-body { padding: 4px 0 16px; }
+  .admin-rec-body h4 { font-size: 13px; color: var(--text-2); margin: 12px 0 6px; }
   .read-title { font-size: 22px; margin: 0 0 14px; letter-spacing: -0.02em; overflow-wrap: anywhere; }
   .read-field + .read-field { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
   .read-label { font-size: 12.5px; font-weight: 700; color: var(--text-2); margin-bottom: 4px; }
@@ -338,6 +349,7 @@
     <div class="topbar-in">
       <a class="logo" href="#/"><img src="favicon.svg" alt="" width="28" height="28">농지 도우미</a>
       <span class="user-mail" id="userMail"></span>
+      <a class="btn ghost small" href="#/admin" id="adminLink" hidden>관리자</a>
       <a class="btn ghost small" href="#/settings">설정</a>
       <button class="btn ghost small" id="logoutBtn">로그아웃</button>
     </div>

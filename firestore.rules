@@ -1,9 +1,28 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // 각 사용자는 자기 데이터만 읽고 쓸 수 있음
-    match /users/{userId}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+    function signedIn() { return request.auth != null; }
+    function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
+    // 관리자: 모든 사용자의 내담자·기록을 "읽기만" 가능. AI 이용 키(private)는 볼 수 없음.
+    // app.js의 ADMINS 목록과 같게 유지
+    function isAdmin() {
+      return signedIn() && request.auth.token.email_verified == true
+        && request.auth.token.email in ['leejjinhong@gmail.com'];
+    }
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if isOwner(userId);
+      match /clients/{id} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow write: if isOwner(userId);
+      }
+      match /records/{id} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow write: if isOwner(userId);
+      }
+      match /private/{id} {
+        allow read, write: if isOwner(userId);
+      }
     }
   }
 }

@@ -3,13 +3,16 @@ import {
   getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import {
-  getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, writeBatch,
+  getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, writeBatch, deleteField,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 import { firebaseConfig } from './firebase-config.js';
 
 const GEMINI = 'https://generativelanguage.googleapis.com/v1beta';
 const PREFS = 'sangdam-helper:prefs';
 const TYPE = { analysis: '사례 분석', journal: '상담일지' };
+// 관리자: 모든 사용자의 기록을 읽기 전용으로 볼 수 있음 (firestore.rules의 isAdmin과 같은 목록이어야 함)
+const ADMINS = ['leejjinhong@gmail.com'];
+const isAdminUser = () => !!user && ADMINS.includes(user.email);
 const SHORT = { analysis: '사례', journal: '일지' }; // 다시 생성 버튼용 짧은 이름
 const HISTORY_COUNT = 3;
 
@@ -80,6 +83,7 @@ async function boot() {
       return;
     }
     $('#userMail').textContent = u.email || '';
+    $('#adminLink').hidden = !isAdminUser();
     show('#appView');
     route();
   });
@@ -90,6 +94,16 @@ async function loadData() {
   const snap = await getDoc(pref);
   profile = snap.exists() ? snap.data() : {};
   if (!snap.exists()) await setDoc(pref, { email: user.email || '', createdAt: Date.now() });
+  setDoc(pref, { email: user.email || '', lastSeenAt: Date.now() }, { merge: true }).catch(() => {});
+  // AI 이용 키는 관리자도 볼 수 없게 users/{uid}/private/settings 에 따로 보관 (예전 위치에 있으면 옮기고 지움)
+  const keyRef = doc(db, 'users', user.uid, 'private', 'settings');
+  const ks = await getDoc(keyRef);
+  let key = ks.exists() ? ks.data().geminiKey || '' : '';
+  if (profile.geminiKey !== undefined) {
+    if (!key && profile.geminiKey) { key = profile.geminiKey; await setDoc(keyRef, { geminiKey: key }, { merge: true }); }
+    await updateDoc(pref, { geminiKey: deleteField() });
+  }
+  profile.geminiKey = key;
   const [cs, rs] = await Promise.all([getDocs(userCol('clients')), getDocs(userCol('records'))]);
   clients = cs.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => a.name.localeCompare(b.name, 'ko'));
   records = rs.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt - a.createdAt);
@@ -163,6 +177,7 @@ function route() {
   else if (page === 'new' && clients.some((c) => c.id === a) && TYPE[b]) openEditor({ clientId: a, type: b });
   else if (page === 'r' && records.some((r) => r.id === a)) openEditor(records.find((r) => r.id === a));
   else if (page === 'settings') viewSettings();
+  else if (page === 'admin' && isAdminUser()) viewAdmin(a);
   else viewHome();
   renderNav();
   window.scrollTo(0, 0);
@@ -318,7 +333,7 @@ function viewClient(id) {
     <div class="stack">
       <div class="card">
         <h3>내담자 메모</h3>
-        <p class="sub">이 내담자에 대해 기억해 둘 내용 (다른 사람은 볼 수 없습니다)</p>
+        <p class="sub">이 내담자에 대해 기억해 둘 내용</p>
         <textarea id="memo" placeholder="예) 2026년 9월 의뢰, 주 1회, 모 상담 격주">${esc(c.memo)}</textarea>
       </div>
       ${listHTML(list, false)}
@@ -691,6 +706,81 @@ function renderBulk(host, clientId, { text, onBack, onSaved, excludeId, autoGen 
   const r = splitByRule(text.trim());
   if (r.sessions.length >= 2) { sessions = r.sessions; step2(r.before); }
   else fallback('"N회기"로 시작하는 줄을 두 개 이상 찾지 못했어요.');
+}
+
+// ---------- 관리자 (읽기 전용) ----------
+const adminCache = {};
+async function loadUserData(uid) {
+  const [cs, rs] = await Promise.all([
+    getDocs(collection(db, 'users', uid, 'clients')),
+    getDocs(collection(db, 'users', uid, 'records')),
+  ]);
+  return {
+    clients: cs.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => a.name.localeCompare(b.name, 'ko')),
+    records: rs.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt - a.createdAt),
+  };
+}
+const pct = (n, total) => (total ? Math.round((n / total) * 100) + '%' : '-');
+async function viewAdmin(uid) {
+  const main = $('#main');
+  main.innerHTML = '<div class="status"><span class="spinner"></span>불러오는 중…</div>';
+  try {
+    if (!uid) {
+      const us = await getDocs(collection(db, 'users'));
+      const rows = await Promise.all(us.docs.map(async (d) => {
+        const data = adminCache[d.id] = await loadUserData(d.id);
+        return { uid: d.id, email: d.data().email || '(이메일 없음)', lastSeenAt: d.data().lastSeenAt, ...data };
+      }));
+      rows.sort((a, b) => (b.lastSeenAt || 0) - (a.lastSeenAt || 0));
+      main.innerHTML = `
+        <div class="page-head"><h2>관리자</h2></div>
+        <p class="sub">모든 사용자의 기록을 읽기 전용으로 봅니다. AI 이용 키는 보이지 않습니다.</p>
+        <div class="table-wrap"><table class="admin-table">
+          <thead><tr><th>사용자</th><th>내담자</th><th>상담일지</th><th>사례 분석</th><th>문장으로 쓰기</th><th>결과 생성</th><th>마지막 접속</th></tr></thead>
+          <tbody>${rows.map((r) => {
+            const j = r.records.filter((x) => x.type === 'journal').length;
+            const sent = r.records.filter((x) => x.mode === 'sentence').length;
+            const gen = r.records.filter((x) => x.result).length;
+            return `<tr data-uid="${r.uid}">
+              <td><a href="#/admin/${r.uid}">${esc(r.email)}</a></td>
+              <td>${r.clients.length}</td><td>${j}</td><td>${r.records.length - j}</td>
+              <td>${pct(sent, r.records.length)}</td><td>${pct(gen, r.records.length)}</td>
+              <td>${r.lastSeenAt ? fmtDate(r.lastSeenAt) : '-'}</td></tr>`;
+          }).join('')}</tbody>
+        </table></div>`;
+      return;
+    }
+    const data = adminCache[uid] || (adminCache[uid] = await loadUserData(uid));
+    const u = await getDoc(doc(db, 'users', uid));
+    const email = u.exists() ? u.data().email : uid;
+    const byClient = (cid) => data.records.filter((r) => r.clientId === cid);
+    const recHTML = (r) => {
+      const inputs = Object.entries(r.inputs || {}).filter(([, v]) => (v || '').trim());
+      return `<details class="admin-rec">
+        <summary><span class="ktag ${r.type}">${r.type === 'journal' ? '일지' : '분석'}</span><b>${esc(r.title || '')}</b>
+          <span class="sub" style="margin:0">${fmtDate(r.createdAt)} · ${MODES[r.mode] || '방식 기록 없음'}${r.result ? '' : ' · 결과 없음'}</span></summary>
+        <div class="admin-rec-body">
+          <h4>입력한 내용</h4>
+          ${inputs.length ? inputs.map(([k, v]) => `<div class="read-field"><div class="read-label">${esc(k)}</div><div class="read-value">${esc(v)}</div></div>`).join('') : '<p class="sub">없음</p>'}
+          ${r.lenses?.length ? `<p class="sub" style="margin:10px 0 0">적용 이론: ${esc(manifest.lenses.filter((l) => r.lenses.includes(l.id)).map((l) => l.title).join(', '))}${r.useHistory ? ' · 이전 기록 참고' : ''}</p>` : ''}
+          ${r.result ? `<h4>결과</h4><div class="result">${DOMPurify.sanitize(marked.parse(r.result))}</div>` : ''}
+        </div>
+      </details>`;
+    };
+    main.innerHTML = `
+      <a class="back" href="#/admin">← 관리자</a>
+      <div class="page-head"><h2>${esc(email)}</h2><button class="btn ghost h32" id="adminRefresh">새로고침</button></div>
+      <p class="sub">읽기 전용 · 내담자 ${data.clients.length}명 · 기록 ${data.records.length}건</p>
+      ${data.clients.map((c) => `
+        <div class="card admin-client">
+          <h3>${esc(c.name)} <span class="sub" style="margin:0">기록 ${byClient(c.id).length}건</span></h3>
+          ${c.memo ? `<p class="sub">내담자 메모: ${esc(c.memo)}</p>` : ''}
+          ${byClient(c.id).map(recHTML).join('') || '<p class="sub">기록 없음</p>'}
+        </div>`).join('') || '<div class="card empty"><b>아직 내담자가 없습니다</b></div>'}`;
+    $('#adminRefresh').onclick = () => { delete adminCache[uid]; viewAdmin(uid); };
+  } catch (err) {
+    main.innerHTML = `<div class="error-box">불러오지 못했습니다. Firebase 보안 규칙에 관리자 권한이 적용됐는지 확인해 주세요. (${esc(err.message)})</div>`;
+  }
 }
 
 // ---------- 기록 내보내기 ----------
@@ -1475,6 +1565,7 @@ function viewSettings() {
       </div>
       <div class="card">
         <h3>계정</h3>
+        <p class="sub">기록은 서비스 개선을 위해 관리자가 열람할 수 있습니다. AI 이용 키는 본인만 볼 수 있습니다.</p>
         <p class="sub">${esc(user.email || '')} 으로 로그인되어 있습니다. 내담자 ${clients.length}명, 기록 ${records.length}건</p>
       </div>
     </div>`;
@@ -1489,7 +1580,7 @@ function viewSettings() {
     state('키를 확인하고 있습니다…');
     try {
       models = await findModels(k);
-      await setDoc(doc(db, 'users', user.uid), { geminiKey: k }, { merge: true });
+      await setDoc(doc(db, 'users', user.uid, 'private', 'settings'), { geminiKey: k }, { merge: true });
       profile.geminiKey = k;
       state('✓ 저장했습니다. 이제 기록을 만들 수 있어요', 'ok');
     } catch (e) {
@@ -1499,7 +1590,7 @@ function viewSettings() {
   const rm = $('#removeKey');
   if (rm) rm.onclick = async () => {
     if (!(await confirmModal({ title: '이용 키 삭제', message: '저장된 AI 이용 키를 지웁니다. 다시 쓰려면 키를 새로 등록해야 합니다.', okLabel: '키 삭제', danger: true }))) return;
-    await setDoc(doc(db, 'users', user.uid), { geminiKey: '' }, { merge: true });
+    await setDoc(doc(db, 'users', user.uid, 'private', 'settings'), { geminiKey: '' }, { merge: true });
     profile.geminiKey = ''; models = null;
     viewSettings();
   };
