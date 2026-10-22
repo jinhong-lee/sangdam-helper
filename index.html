@@ -173,6 +173,14 @@
   .admin-rec summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 0; cursor: pointer; }
   .admin-rec-body { padding: 4px 0 16px; }
   .admin-rec-body h4 { font-size: 13px; color: var(--text-2); margin: 12px 0 6px; }
+  .viewas-badge { display: inline-flex; align-items: center; gap: 8px; padding: 4px 4px 4px 12px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); font-size: 13px; white-space: nowrap; }
+  .viewas-badge b { color: var(--text); max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+  body.viewas .topbar { border-bottom: 2px solid var(--accent); }
+  /* 사용자 화면 보기: 쓰기 동작 전부 숨김 */
+  body.viewas #navAddClient, body.viewas #firstClient, body.viewas #emptyAddClient,
+  body.viewas #moreBtn, body.viewas .item .more, body.viewas .page-head .btn.soft,
+  body.viewas #delBtn, body.viewas #editBtn, body.viewas #runBtn, body.viewas #saveBtn, body.viewas #cancelBtn { display: none !important; }
+  body.viewas #memo { background: var(--surface-2); cursor: default; }
   .read-title { font-size: 22px; margin: 0 0 14px; letter-spacing: -0.02em; overflow-wrap: anywhere; }
   .read-field + .read-field { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
   .read-label { font-size: 12.5px; font-weight: 700; color: var(--text-2); margin-bottom: 4px; }
@@ -348,6 +356,7 @@
   <header class="topbar">
     <div class="topbar-in">
       <a class="logo" href="#/"><img src="favicon.svg" alt="" width="28" height="28">농지 도우미</a>
+      <span class="viewas-badge" id="viewasBadge" hidden>👀 <b id="viewasName"></b> 화면 보는 중 · 읽기 전용 <button class="btn h32" id="viewasExit">나가기</button></span>
       <span class="user-mail" id="userMail"></span>
       <a class="btn ghost small" href="#/admin" id="adminLink" hidden>관리자</a>
       <a class="btn ghost small" href="#/settings">설정</a>

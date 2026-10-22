@@ -136,6 +136,7 @@ async function askUnsaved(actionLabel) {
   return true;
 }
 $('#logoutBtn').onclick = async () => {
+  exitViewAs();
   if (!(await askUnsaved('로그아웃'))) return;
   running?.abort();
   await signOut(auth);
@@ -173,8 +174,10 @@ function route() {
   closeMenus();
   editor = null;
   const [, page, a, b] = (location.hash || '#/').split('/');
+  if (viewAs && (page === 'settings' || page === 'admin')) exitViewAs();   // 설정·관리자로 가면 내 화면으로 돌아옴
+  if (page === 'admin' && a && isAdminUser()) { enterViewAs(a); return; }
   if (page === 'c' && clients.some((c) => c.id === a)) viewClient(a);
-  else if (page === 'new' && clients.some((c) => c.id === a) && TYPE[b]) openEditor({ clientId: a, type: b });
+  else if (page === 'new' && !viewAs && clients.some((c) => c.id === a) && TYPE[b]) openEditor({ clientId: a, type: b });
   else if (page === 'r' && records.some((r) => r.id === a)) openEditor(records.find((r) => r.id === a));
   else if (page === 'settings') viewSettings();
   else if (page === 'admin' && isAdminUser()) viewAdmin(a);
@@ -334,7 +337,7 @@ function viewClient(id) {
       <div class="card">
         <h3>내담자 메모</h3>
         <p class="sub">이 내담자에 대해 기억해 둘 내용</p>
-        <textarea id="memo" placeholder="예) 2026년 9월 의뢰, 주 1회, 모 상담 격주">${esc(c.memo)}</textarea>
+        <textarea id="memo" placeholder="예) 2026년 9월 의뢰, 주 1회, 모 상담 격주" ${viewAs ? 'readonly' : ''}>${esc(c.memo)}</textarea>
       </div>
       ${listHTML(list, false)}
     </div>`;
@@ -708,6 +711,37 @@ function renderBulk(host, clientId, { text, onBack, onSaved, excludeId, autoGen 
   else fallback('"N회기"로 시작하는 줄을 두 개 이상 찾지 못했어요.');
 }
 
+// ---------- 관리자: 사용자 화면 그대로 보기 (읽기 전용) ----------
+// 헤더를 뺀 왼쪽 메뉴·본문 전체를 그 사용자의 데이터로 바꿔서 보여줌. 쓰기 버튼은 body.viewas 로 숨김(보안 규칙에서도 쓰기 차단).
+let viewAs = null, ownData = null;
+async function enterViewAs(uid) {
+  $('#main').innerHTML = '<div class="status"><span class="spinner"></span>불러오는 중…</div>';
+  try {
+    const data = adminCache[uid] || (adminCache[uid] = await loadUserData(uid));
+    const u = await getDoc(doc(db, 'users', uid));
+    if (!ownData) ownData = { clients, records };
+    clients = data.clients; records = data.records;
+    viewAs = { uid, email: u.exists() ? u.data().email || uid : uid };
+    navToggled.clear();
+    document.body.classList.add('viewas');
+    $('#viewasName').textContent = viewAs.email;
+    $('#viewasBadge').hidden = false;
+    setHashSilently('#/');
+    route();
+  } catch (err) {
+    $('#main').innerHTML = `<div class="error-box">불러오지 못했습니다. (${esc(err.message)})</div>`;
+  }
+}
+function exitViewAs() {
+  if (!viewAs) return;
+  clients = ownData.clients; records = ownData.records;
+  viewAs = null; ownData = null;
+  navToggled.clear();
+  document.body.classList.remove('viewas');
+  $('#viewasBadge').hidden = true;
+}
+$('#viewasExit').onclick = () => { exitViewAs(); location.hash = '#/admin'; if (location.hash === '#/admin') route(); };
+
 // ---------- 관리자 (읽기 전용) ----------
 const adminCache = {};
 async function loadUserData(uid) {
@@ -734,7 +768,7 @@ async function viewAdmin(uid) {
       rows.sort((a, b) => (b.lastSeenAt || 0) - (a.lastSeenAt || 0));
       main.innerHTML = `
         <div class="page-head"><h2>관리자</h2></div>
-        <p class="sub">모든 사용자의 기록을 읽기 전용으로 봅니다. AI 이용 키는 보이지 않습니다.</p>
+        <p class="sub">사용자를 누르면 그 사람이 보는 화면을 그대로 볼 수 있어요(읽기 전용). AI 이용 키는 보이지 않습니다.</p>
         <div class="table-wrap"><table class="admin-table">
           <thead><tr><th>사용자</th><th>내담자</th><th>상담일지</th><th>사례 분석</th><th>문장으로 쓰기</th><th>결과 생성</th><th>마지막 접속</th></tr></thead>
           <tbody>${rows.map((r) => {
