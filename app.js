@@ -603,7 +603,8 @@ function renderBulk(host, clientId, { text, onBack, onSaved, excludeId, autoGen 
 
   // 2단계: 미리보기·수정
   const step2 = (before, byAI) => {
-    const existing = clientRecords(clientId).filter((r) => r.type === 'journal' && r.id !== excludeId)   // 지금 쓰던 임시 기록은 제외.map((r) => (r.title.match(/^(\d+)회기/) || [])[1]).filter(Boolean);
+    // 지금 쓰던 임시 기록은 제외
+    const existing = clientRecords(clientId).filter((r) => r.type === 'journal' && r.id !== excludeId).map((r) => (r.title.match(/^(\d+)회기/) || [])[1]).filter(Boolean);
     box.innerHTML = `
       <div>
         <h3 class="bulk-title">${sessions.length}개 회기로 나눴어요</h3>
@@ -957,7 +958,7 @@ function inferMode(src) {
 
 function openEditor(src) {
   const type = src.type;
-  const hasHistory = clientRecords(src.clientId).some((r) => r.id !== src.id && r.result);
+  const hasHistory = prevRecords(src.clientId, src.id).length > 0;
   editor = {
     id: src.id || null,
     clientId: src.clientId,
@@ -1208,7 +1209,8 @@ async function openRunModal() {
   if (!buildPrompt().filledCount) return toast('내용을 하나 이상 입력해 주세요');
   if (canSplit(e) && sessionCount(e) >= 2) return startSplit(true);   // 여러 회기면 묻지 않고 회기별 미리보기로(내용 생성 체크된 상태)
   applyAutoTitle(e);
-  const prevCount = clientRecords(e.clientId).filter((r) => r.id !== e.id && r.result).length;
+  const prevCount = prevRecords(e.clientId, e.id, e.createdAt).length;
+  const memo = (clients.find((c) => c.id === e.clientId)?.memo || '').trim();
   const opener = document.activeElement;
   const back = document.createElement('div');
   back.className = 'modal-back';
@@ -1229,6 +1231,7 @@ async function openRunModal() {
             <small>${prevCount ? `최근 기록 ${Math.min(prevCount, HISTORY_COUNT)}건을 함께 보내 변화와 반복되는 주제를 반영합니다` : '아직 참고할 이전 기록이 없습니다'}</small>
           </span>
         </label>
+        ${memo ? '<p class="modal-note">내담자 메모(나이·의뢰 사유 등)도 함께 참고합니다.</p>' : ''}
         ${e.result ? '<p class="modal-note">지금 결과는 새 결과로 바뀝니다.</p>' : ''}
       </div>
       <div class="modal-actions">
@@ -1334,6 +1337,16 @@ async function doSave(e, silent, byUser) {
 }
 
 // ---------- 질문문 조립 ----------
+// 이전 기록으로 보낼 내용: AI 결과가 있으면 결과, 없으면 작성한 원문 (결과 없이 저장한 기록도 회기 흐름에 포함)
+function recordText(r) {
+  return (r.result || Object.values(r.inputs || {}).filter((v) => typeof v === 'string').join('\n\n')).trim();
+}
+function prevRecords(clientId, id, createdAt) {
+  return clientRecords(clientId)
+    .filter((r) => r.id !== id && recordText(r) && (!createdAt || r.createdAt < createdAt))
+    .sort((a, b) => b.createdAt - a.createdAt);
+}
+
 function buildPrompt(e = editor) {
   const lenses = manifest.lenses.filter((l) => e.lenses.includes(l.id));
   const filled = modeFields(e.type, e.mode || 'fields')
@@ -1350,18 +1363,16 @@ function buildPrompt(e = editor) {
   out += sep + docs[manifest.formats[e.type].id];
 
   if (e.useHistory) {
-    const prev = clientRecords(e.clientId)
-      .filter((r) => r.id !== e.id && r.result && (!e.createdAt || r.createdAt < e.createdAt))
-      .sort((a, b) => b.createdAt - a.createdAt)
-      .slice(0, HISTORY_COUNT)
-      .reverse();
+    const prev = prevRecords(e.clientId, e.id, e.createdAt).slice(0, HISTORY_COUNT).reverse();
     if (prev.length) {
       out += sep + `# [이전 기록] 같은 내담자의 최근 기록 ${prev.length}건 (오래된 순)\n\n이전 기록과 비교해 **변화, 반복되는 주제, 연속성**을 반영하십시오. 이전 기록과 이번 입력 정보가 다르면 이번 입력 정보를 우선하십시오.\n\n`
-        + prev.map((r) => `## ${TYPE[r.type]} · ${r.title} · ${fmtDay(r.createdAt)}\n\n${r.result.slice(0, 4000)}`).join('\n\n');
+        + prev.map((r) => `## ${TYPE[r.type]} · ${r.title} · ${fmtDay(r.createdAt)}${r.result ? '' : ' (작성 원문)'}\n\n${recordText(r).slice(0, 4000)}`).join('\n\n');
     }
   }
 
-  out += sep + `# [입력 정보]\n\n내담자: ${clientName(e.clientId)}\n기록: ${e.title}\n\n` + filled.map(([k, v]) => `## ${k}\n${v}`).join('\n\n');
+  const memo = (clients.find((c) => c.id === e.clientId)?.memo || '').trim();
+  out += sep + `# [입력 정보]\n\n내담자: ${clientName(e.clientId)}\n기록: ${e.title}\n\n`
+    + (memo ? `## 내담자 기본 정보 (상담자 메모)\n나이·의뢰 사유·발달력 등 고정 정보입니다. 판단할 때 반드시 반영하십시오.\n${memo}\n\n` : '') + filled.map(([k, v]) => `## ${k}\n${v}`).join('\n\n');
   out += sep + `${lenses.length ? '[참고자료]의 이론을 순서대로 빠짐없이 적용해 ' : ''}[출력 양식]에 맞춰 ${task}을 해주십시오. 답변은 한국어 마크다운으로 작성하십시오.`;
   return { system: docs[manifest.role.id], user: out, filledCount: filled.length };
 }
