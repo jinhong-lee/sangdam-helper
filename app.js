@@ -26,6 +26,28 @@ const fmtDay = (ts) => new Date(ts).toLocaleDateString('ko-KR');
 const recDate = (r) => r.editedAt ? `${fmtDate(r.editedAt)} (수정)` : fmtDate(r.writtenAt || r.updatedAt || r.createdAt);
 const plain = (md) => (md || '').replace(/[#*|>`_-]+/g, ' ').replace(/\s+/g, ' ').trim();
 
+// ---------- 화면 갱신 ----------
+// 화면 전체를 지우고 다시 그리지 않고, 새 화면과 비교해 바뀐 부분만 고침(morphdom).
+// → 이동·저장 때 깜빡임이 없고, 입력 중인 칸·스크롤·포커스가 유지되며, 기록이 많아도 바뀐 곳만 손댐.
+const nodeKey = (n) => (n.nodeType === 1 ? n.id || n.getAttribute('data-open') || n.getAttribute('data-tkey') || n.getAttribute('data-key') || undefined : undefined);
+function paint(el, html) {
+  if (!el) return;
+  if (!window.morphdom) { el.innerHTML = html; return; }   // 라이브러리를 못 불러오면 예전 방식으로
+  const next = el.cloneNode(false);
+  next.innerHTML = html;
+  window.morphdom(el, next, {
+    childrenOnly: true,
+    getNodeKey: nodeKey,
+    onBeforeElUpdated: (from, to) => !from.isEqualNode(to),   // 똑같은 부분은 건드리지 않음
+  });
+}
+const view = {
+  set main(html) { paint($('#main'), html); },
+  set nav(html) { paint($('#nav'), html); },
+};
+// 화면을 다시 그릴 때마다 이벤트를 다시 연결하므로, 쌓이지 않게 on* 속성으로 덮어씀
+function on(sel, type, fn) { const el = $(sel); if (el) el['on' + type] = fn; }
+
 function toast(msg) {
   const t = $('#toast'); t.textContent = msg; t.classList.remove('act'); t.classList.add('show');
   clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove('show'), 2000);
@@ -251,7 +273,7 @@ function renderNav() {
     if (q && !nameHit) recs = recs.filter((r) => (r.title || '').toLowerCase().includes(q));
     return { c, recs, show: nameHit || recs.length, total: clientRecords(c.id).length };
   }).filter((g) => g.show);
-  $('#nav').innerHTML = `
+  view.nav = `
     ${groups.map(({ c, recs, total }) => {
       const open = q ? true : navToggled.has(c.id) ? navToggled.get(c.id) : c.id === curClient;
       const cls = page === 'c' && a === c.id ? 'on' : c.id === curClient ? 'parent' : '';
@@ -391,7 +413,7 @@ async function addClient() {
 function viewClient(id) {
   const c = clients.find((x) => x.id === id);
   const list = clientRecords(id);
-  $('#main').innerHTML = `
+  view.main = `
     <div class="page-head" style="align-items:center">
       <div class="name-row">
         <h2>${esc(c.name)}</h2>
@@ -517,12 +539,12 @@ function profileCardHTML(c) {
     </div>`;
 }
 function bindProfileCard(c) {
-  $('#pfToggle')?.addEventListener('click', () => {
+  on('#pfToggle', 'click', () => {
     const next = $('#pfToggle').getAttribute('aria-expanded') !== 'true';
     prefs.profileOpen = next; savePrefs(prefs);
     $('#pfToggle').setAttribute('aria-expanded', next); $('#pfDetails').hidden = !next;
   });
-  $('#pfEdit')?.addEventListener('click', () => openProfileModal(c));
+  on('#pfEdit', 'click', () => openProfileModal(c));
 }
 
 function openProfileModal(c) {
@@ -615,7 +637,7 @@ function openProfileModal(c) {
 
 function viewHome() {
   if (!clients.length) {
-    $('#main').innerHTML = `
+    view.main = `
       <div class="card empty">
         <b>첫 내담자를 추가해 주세요</b>
         내담자별로 상담일지와 사례 분석을 모아서 관리합니다.<br>이름 대신 "A-1"처럼 나만 알아볼 수 있는 별칭을 쓰세요.
@@ -625,7 +647,7 @@ function viewHome() {
     $('#firstClient').onclick = addClient;
     return;
   }
-  $('#main').innerHTML = `
+  view.main = `
     <div class="page-head"><h2>전체 기록</h2></div>
     ${profile.geminiKey ? '' : '<div class="card" style="margin-bottom:16px">결과를 만들려면 먼저 AI 이용 키를 등록해 주세요. <a href="#/settings">설정으로 가기</a></div>'}
     ${records.length ? listHTML(records, true) : `
@@ -634,7 +656,7 @@ function viewHome() {
         왼쪽에서 내담자를 골라 첫 기록을 만들거나, 새 내담자를 추가해 보세요.
         <div style="margin-top:18px"><button class="btn ghost" id="emptyAddClient">+ 내담자 추가</button></div>
       </div>`}`;
-  $('#emptyAddClient')?.addEventListener('click', addClient);
+  on('#emptyAddClient', 'click', addClient);
   bindList();
 }
 
@@ -680,7 +702,7 @@ function listInner() {
 }
 function renderList(focusId) {
   const w = $('#listWrap'); if (!w) return;
-  w.innerHTML = listInner(); bindList();
+  paint(w, listInner()); bindList();
   if (focusId) w.querySelector(`[data-pick="${focusId}"]`)?.focus();
 }
 function togglePick(id, on = !sel.ids.has(id)) {
@@ -713,14 +735,14 @@ function bindList() {
     };
   });
   $('#main').querySelectorAll('[data-pick]').forEach((cb) => { cb.onchange = () => togglePick(cb.dataset.pick, cb.checked); });
-  $('#selBtn')?.addEventListener('click', () => { sel = { ids: new Set() }; renderList(); });
-  $('#selCancel')?.addEventListener('click', () => { sel = null; renderList(); $('#selBtn')?.focus(); });
-  $('#selAll')?.addEventListener('click', () => {
+  on('#selBtn', 'click', () => { sel = { ids: new Set() }; renderList(); });
+  on('#selCancel', 'click', () => { sel = null; renderList(); $('#selBtn')?.focus(); });
+  on('#selAll', 'click', () => {
     const all = sel.ids.size === curList.list.length;
     sel.ids = new Set(all ? [] : curList.list.map((r) => r.id)); renderList();
   });
-  $('#selGen')?.addEventListener('click', () => openBatchRun(curList.list.filter((r) => sel.ids.has(r.id))));
-  $('#selDel')?.addEventListener('click', () => trashRecords([...sel.ids]));
+  on('#selGen', 'click', () => openBatchRun(curList.list.filter((r) => sel.ids.has(r.id))));
+  on('#selDel', 'click', () => trashRecords([...sel.ids]));
   $('#main').querySelectorAll('.item [data-more]').forEach((b) => { b.onclick = () => toggleMenu(b); });
   $('#main').querySelectorAll('[data-dup]').forEach((b) => { b.onclick = () => { closeMenus(); duplicate(b.dataset.dup); }; });
   $('#main').querySelectorAll('[data-del]').forEach((b) => { b.onclick = () => { closeMenus(); removeRecord(b.dataset.del); }; });
@@ -999,7 +1021,7 @@ function renderBulk(host, clientId, { text, onBack, onSaved, excludeId, autoGen 
 // 헤더를 뺀 왼쪽 메뉴·본문 전체를 그 사용자의 데이터로 바꿔서 보여줌. 쓰기 버튼은 body.viewas 로 숨김(보안 규칙에서도 쓰기 차단).
 let viewAs = null, ownData = null;
 async function enterViewAs(uid) {
-  $('#main').innerHTML = '<div class="status"><span class="spinner"></span>불러오는 중…</div>';
+  view.main = '<div class="status"><span class="spinner"></span>불러오는 중…</div>';
   try {
     const data = adminCache[uid] || (adminCache[uid] = await loadUserData(uid));
     const u = await getDoc(doc(db, 'users', uid));
@@ -1013,7 +1035,7 @@ async function enterViewAs(uid) {
     setHashSilently('#/');
     route();
   } catch (err) {
-    $('#main').innerHTML = `<div class="error-box">불러오지 못했습니다. (${esc(err.message)})</div>`;
+    view.main = `<div class="error-box">불러오지 못했습니다. (${esc(err.message)})</div>`;
   }
 }
 function exitViewAs() {
@@ -1042,7 +1064,7 @@ async function loadUserData(uid) {
 const pct = (n, total) => (total ? Math.round((n / total) * 100) + '%' : '-');
 async function viewAdmin(uid) {
   const main = $('#main');
-  main.innerHTML = '<div class="status"><span class="spinner"></span>불러오는 중…</div>';
+  view.main = '<div class="status"><span class="spinner"></span>불러오는 중…</div>';
   try {
     if (!uid) {
       const us = await getDocs(collection(db, 'users'));
@@ -1051,7 +1073,7 @@ async function viewAdmin(uid) {
         return { uid: d.id, email: d.data().email || '(이메일 없음)', lastSeenAt: d.data().lastSeenAt, ...data };
       }));
       rows.sort((a, b) => (b.lastSeenAt || 0) - (a.lastSeenAt || 0));
-      main.innerHTML = `
+      view.main = `
         <div class="page-head"><h2>관리자</h2></div>
         ${adminTabs('users')}
         <p class="sub">사용자를 누르면 그 사람이 보는 화면을 그대로 볼 수 있어요(읽기 전용). AI 이용 키는 보이지 않습니다.</p>
@@ -1087,7 +1109,7 @@ async function viewAdmin(uid) {
         </div>
       </details>`;
     };
-    main.innerHTML = `
+    view.main = `
       <a class="back" href="#/admin">← 관리자</a>
       <div class="page-head"><h2>${esc(email)}</h2><button class="btn ghost h32" id="adminRefresh">새로고침</button></div>
       <p class="sub">읽기 전용 · 내담자 ${data.clients.length}명 · 기록 ${data.records.length}건</p>
@@ -1099,7 +1121,7 @@ async function viewAdmin(uid) {
         </div>`).join('') || '<div class="card empty"><b>아직 내담자가 없습니다</b></div>'}`;
     $('#adminRefresh').onclick = () => { delete adminCache[uid]; viewAdmin(uid); };
   } catch (err) {
-    main.innerHTML = `<div class="error-box">불러오지 못했습니다. Firebase 보안 규칙에 관리자 권한이 적용됐는지 확인해 주세요. (${esc(err.message)})</div>`;
+    view.main = `<div class="error-box">불러오지 못했습니다. Firebase 보안 규칙에 관리자 권한이 적용됐는지 확인해 주세요. (${esc(err.message)})</div>`;
   }
 }
 
@@ -1196,13 +1218,13 @@ async function loadFeedback() {
 }
 async function viewFeedback() {
   const main = $('#main');
-  main.innerHTML = '<div class="status"><span class="spinner"></span>불러오는 중…</div>';
+  view.main = '<div class="status"><span class="spinner"></span>불러오는 중…</div>';
   try { await loadFeedback(); } catch (e) {
-    main.innerHTML = `<div class="page-head"><h2>관리자</h2></div>${adminTabs('feedback')}<div class="error-box">의견을 불러오지 못했습니다. Firebase 콘솔에 새 보안 규칙(firestore.rules)을 게시했는지 확인해 주세요. (${esc(e.message)})</div>`;
+    view.main = `<div class="page-head"><h2>관리자</h2></div>${adminTabs('feedback')}<div class="error-box">의견을 불러오지 못했습니다. Firebase 콘솔에 새 보안 규칙(firestore.rules)을 게시했는지 확인해 주세요. (${esc(e.message)})</div>`;
     return;
   }
   const render = () => {
-    main.innerHTML = `
+    view.main = `
       <div class="page-head"><h2>관리자</h2><button class="btn ghost h32" id="fbRefresh">새로고침</button></div>
       ${adminTabs('feedback')}
       <p class="sub">새로 온 의견이 위에 보여요. 상태를 바꾸면 바로 저장돼요.</p>
@@ -1404,7 +1426,7 @@ function viewTrash() {
   const n = trashSel.size;
   const names = [...new Set(all.map((x) => x.clientId))].map((id) => [id, anyClientName(id)]).sort((a, b) => a[1].localeCompare(b[1], 'ko'));
   const left = (x) => Math.max(0, Math.ceil((x.deletedAt + TRASH_DAYS * 864e5 - Date.now()) / 864e5));
-  $('#main').innerHTML = `
+  view.main = `
     <div class="page-head" style="align-items:center">
       <h2>쓰레기통</h2>
       ${all.length ? '<div class="row"><button class="btn ghost h32" id="tRestoreAll">모두 복구</button><button class="btn danger h32" id="tEmpty">쓰레기통 비우기</button></div>' : ''}
@@ -1460,12 +1482,12 @@ function viewTrash() {
   });
   $('#main').querySelectorAll('[data-trestore]').forEach((b) => { b.onclick = () => restore([byKey(b.dataset.trestore)]); });
   $('#main').querySelectorAll('[data-tpurge]').forEach((b) => { b.onclick = () => purge([byKey(b.dataset.tpurge)], '영구 삭제'); });
-  $('#tAll')?.addEventListener('change', (e) => { trashSel = new Set(e.target.checked ? rows.map(trashKey) : []); viewTrash(); $('#tAll')?.focus(); });
-  $('#tFilter')?.addEventListener('change', (e) => { trashFilter = e.target.value; trashSel.clear(); viewTrash(); $('#tFilter')?.focus(); });
-  $('#tRestore')?.addEventListener('click', () => restore(rows.filter((x) => trashSel.has(trashKey(x)))));
-  $('#tPurge')?.addEventListener('click', () => purge(rows.filter((x) => trashSel.has(trashKey(x))), '영구 삭제'));
-  $('#tRestoreAll')?.addEventListener('click', () => restore(all));
-  $('#tEmpty')?.addEventListener('click', () => purge(all, '쓰레기통 비우기'));
+  on('#tAll', 'change', (e) => { trashSel = new Set(e.target.checked ? rows.map(trashKey) : []); viewTrash(); $('#tAll')?.focus(); });
+  on('#tFilter', 'change', (e) => { trashFilter = e.target.value; trashSel.clear(); viewTrash(); $('#tFilter')?.focus(); });
+  on('#tRestore', 'click', () => restore(rows.filter((x) => trashSel.has(trashKey(x)))));
+  on('#tPurge', 'click', () => purge(rows.filter((x) => trashSel.has(trashKey(x))), '영구 삭제'));
+  on('#tRestoreAll', 'click', () => restore(all));
+  on('#tEmpty', 'click', () => purge(all, '쓰레기통 비우기'));
 }
 
 // ---------- 고른 기록 결과 한꺼번에 만들기 ----------
@@ -1689,7 +1711,7 @@ function updateSplitHint() {
   el.innerHTML = n >= 2
     ? `<span>📋 <b>${n}개 회기</b>가 들어 있어요. 저장하거나 생성하면 회기별 상담일지 ${n}개로 나눠집니다.</span>`
     : (t && n === 0 && t.length > 200 ? '<span>회기 표시("N회기") 없이 여러 회기를 넣었나요?</span><button class="link-btn" id="splitBtn">AI로 회기 나누기</button>' : '');
-  $('#splitBtn')?.addEventListener('click', () => startSplit(false));
+  on('#splitBtn', 'click', () => startSplit(false));
 }
 function startSplit(autoGen) {
   const e = editor;
@@ -1770,7 +1792,7 @@ function renderEditor() {
 function renderReadView() {
   const e = editor;
   const fields = modeFields(e.type, e.mode).filter((f) => (e.inputs[f.label] || '').trim());
-  $('#main').innerHTML = `
+  view.main = `
     <div class="page-head editor-head">
       <div>
         <a class="back" href="#/c/${e.clientId}">← ${esc(clientName(e.clientId))}</a>
@@ -1826,7 +1848,7 @@ const EDIT_HINT = { journal: "예) 클레이 처음 만짐, 손끝만 대다가 
 // ---------- 편집 화면 ----------
 function renderEditForm() {
   const e = editor;
-  $('#main').innerHTML = `
+  view.main = `
     <div class="page-head editor-head">
       <div>
         <a class="back" href="#/c/${e.clientId}">← ${esc(clientName(e.clientId))}</a>
@@ -2280,7 +2302,7 @@ async function run() {
 
 // ---------- 설정 ----------
 function viewSettings() {
-  $('#main').innerHTML = `
+  view.main = `
     <div class="page-head"><h2>설정</h2></div>
     <div class="stack">
       <div class="card">
