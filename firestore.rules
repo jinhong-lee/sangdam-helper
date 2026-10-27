@@ -9,6 +9,16 @@ service cloud.firestore {
       return signedIn() && request.auth.token.email_verified == true
         && request.auth.token.email in ['leejjinhong@gmail.com'];
     }
+    // 의견 보내기: 로그인한 사용자는 자기 이름으로 새 의견만 쓸 수 있고, 읽기·상태 변경은 관리자만
+    match /feedback/{id} {
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'new'
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 2000;
+      allow read, update, delete: if isAdmin();
+    }
     match /users/{userId} {
       allow read: if isOwner(userId) || isAdmin();
       allow write: if isOwner(userId);

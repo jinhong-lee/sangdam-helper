@@ -103,6 +103,7 @@ async function boot() {
     }
     $('#userMail').textContent = u.email || '';
     $('#adminLink').hidden = !isAdminUser();
+    if (isAdminUser()) loadFeedback().catch(() => {});   // 보안 규칙 게시 전이면 조용히 넘어감
     show('#appView');
     route();
   });
@@ -215,6 +216,7 @@ function route() {
   sel = null;
   const [, page, a, b] = (location.hash || '#/').split('/');
   if (viewAs && (page === 'settings' || page === 'admin')) exitViewAs();   // 설정·관리자로 가면 내 화면으로 돌아옴
+  if (page === 'admin' && a === 'feedback' && isAdminUser()) { viewFeedback(); renderNav(); return; }
   if (page === 'admin' && a && isAdminUser()) { enterViewAs(a); return; }
   if (page === 'c' && clients.some((c) => c.id === a)) viewClient(a);
   else if (page === 'new' && !viewAs && clients.some((c) => c.id === a) && TYPE[b]) openEditor({ clientId: a, type: b });
@@ -271,6 +273,37 @@ function renderNav() {
     b.onclick = () => { navToggled.set(b.dataset.tw, b.getAttribute('aria-expanded') !== 'true'); renderNav(); };
   });
 }
+
+// 왼쪽 메뉴 폭 조절 (220~480px, 기기별로 기억)
+const SIDE = { min: 220, max: 480, def: 264 };
+(() => {
+  const layout = document.querySelector('.layout'), handle = $('#sideResizer');
+  if (!layout || !handle) return;
+  const set = (w, save) => {
+    w = Math.round(Math.min(SIDE.max, Math.max(SIDE.min, w)));
+    layout.style.setProperty('--side-w', w + 'px');
+    handle.setAttribute('aria-valuenow', w);
+    if (save) { prefs.sideW = w; savePrefs(prefs); }
+    return w;
+  };
+  handle.setAttribute('aria-valuemin', SIDE.min); handle.setAttribute('aria-valuemax', SIDE.max);
+  let cur = set(prefs.sideW || SIDE.def, false);
+  handle.onpointerdown = (ev) => {
+    ev.preventDefault(); handle.setPointerCapture(ev.pointerId); document.body.classList.add('resizing');
+    handle.onpointermove = (m) => { cur = set(m.clientX, false); };
+    handle.onpointerup = () => { handle.onpointermove = null; document.body.classList.remove('resizing'); cur = set(cur, true); };
+  };
+  handle.ondblclick = () => { cur = set(SIDE.def, true); };
+  handle.onkeydown = (ev) => {
+    const step = ev.shiftKey ? 48 : 16;
+    if (ev.key === 'ArrowLeft') cur = set(cur - step, true);
+    else if (ev.key === 'ArrowRight') cur = set(cur + step, true);
+    else if (ev.key === 'Home') cur = set(SIDE.min, true);
+    else if (ev.key === 'End') cur = set(SIDE.max, true);
+    else return;
+    ev.preventDefault();
+  };
+})();
 
 // 내담자 추가 (왼쪽 메뉴 맨 위)
 $('#navAddClient').onclick = addClient;
@@ -859,6 +892,7 @@ async function viewAdmin(uid) {
       rows.sort((a, b) => (b.lastSeenAt || 0) - (a.lastSeenAt || 0));
       main.innerHTML = `
         <div class="page-head"><h2>관리자</h2></div>
+        ${adminTabs('users')}
         <p class="sub">사용자를 누르면 그 사람이 보는 화면을 그대로 볼 수 있어요(읽기 전용). AI 이용 키는 보이지 않습니다.</p>
         <div class="table-wrap"><table class="admin-table">
           <thead><tr><th>사용자</th><th>내담자</th><th>상담일지</th><th>사례 분석</th><th>문장으로 쓰기</th><th>결과 생성</th><th>마지막 접속</th></tr></thead>
@@ -906,6 +940,132 @@ async function viewAdmin(uid) {
   } catch (err) {
     main.innerHTML = `<div class="error-box">불러오지 못했습니다. Firebase 보안 규칙에 관리자 권한이 적용됐는지 확인해 주세요. (${esc(err.message)})</div>`;
   }
+}
+
+// ---------- 의견 보내기 ----------
+// 사용자는 내용 한 칸만 쓰고, 보낸 사람·시각·화면·기기는 자동으로 붙임. 상담 내용은 담지 않음(화면 이름만).
+const FB_TYPES = { bug: '불편해요', request: '이런 기능 있으면', etc: '기타' };
+const FB_STATUS = { new: '새로 옴', seen: '확인', done: '반영' };
+let fbDraft = { type: null, text: '' };   // 창을 닫아도 쓰던 내용 유지
+let feedback = [];                         // 관리자용
+function screenLabel() {
+  const [, page, a, b] = (location.hash || '#/').split('/');
+  if (page === 'c') return `${clientName(a)} · 내담자 화면`;
+  if (page === 'r') { const r = records.find((x) => x.id === a); return r ? `${clientName(r.clientId)} · ${TYPE[r.type]} 기록 화면` : '기록 화면'; }
+  if (page === 'new') return `${clientName(a)} · 새 ${TYPE[b] || '기록'} 작성`;
+  return { trash: '쓰레기통', settings: '설정', admin: '관리자' }[page] || '전체 기록';
+}
+function deviceLabel() {
+  const ua = navigator.userAgent;
+  const os = /iPhone/.test(ua) ? '아이폰' : /iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) ? '아이패드' : /Android/.test(ua) ? '안드로이드' : /Mac/.test(ua) ? '맥' : /Windows/.test(ua) ? '윈도우' : '기타';
+  const br = /SamsungBrowser/.test(ua) ? '삼성 인터넷' : /Edg\//.test(ua) ? '엣지' : /Whale/.test(ua) ? '웨일' : /KAKAOTALK/.test(ua) ? '카카오톡' : /Chrome|CriOS/.test(ua) ? '크롬' : /Firefox|FxiOS/.test(ua) ? '파이어폭스' : /Safari/.test(ua) ? '사파리' : '기타';
+  return `${os} ${br} · 화면 폭 ${window.innerWidth}px`;
+}
+function openFeedback() {
+  const opener = document.activeElement;
+  const screen = screenLabel(), device = deviceLabel(), hash = location.hash || '#/';
+  const back = document.createElement('div');
+  back.className = 'modal-back';
+  back.innerHTML = `
+    <div class="modal modal-sm" role="dialog" aria-modal="true" aria-labelledby="fbTitle">
+      <div class="modal-body">
+        <h3 id="fbTitle">의견 보내기</h3>
+        <p class="sub">불편한 점이나 있었으면 하는 기능을 편하게 적어주세요.</p>
+        <div class="fb-chips" role="group" aria-label="종류 (선택)">${Object.entries(FB_TYPES).map(([k, v]) => `<button type="button" class="fb-chip" data-type="${k}" aria-pressed="${fbDraft.type === k}">${v}</button>`).join('')}</div>
+        <textarea class="fb-input" id="fbText" maxlength="2000" aria-label="의견 내용" placeholder="예) 결과 만들기를 누르면 너무 오래 걸려요">${esc(fbDraft.text)}</textarea>
+        <p class="fb-warn">내담자 실명이나 상담 내용은 적지 마세요.</p>
+        <p class="fb-ctx">함께 전달돼요: ${esc(screen)} · ${esc(device)}</p>
+        <p class="field-error" id="fbErr" hidden></p>
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" data-cancel>닫기</button>
+        <button class="btn" data-ok disabled>보내기</button>
+      </div>
+    </div>`;
+  document.body.appendChild(back);
+  const ta = back.querySelector('#fbText'), ok = back.querySelector('[data-ok]'), err = back.querySelector('#fbErr');
+  const sync = () => { fbDraft.text = ta.value; ok.disabled = !ta.value.trim(); };
+  const done = () => { document.removeEventListener('keydown', onKey); back.remove(); opener?.focus?.(); };
+  const onKey = (ev) => { if (ev.key === 'Escape') done(); };
+  document.addEventListener('keydown', onKey);
+  ta.oninput = sync;
+  back.querySelectorAll('.fb-chip').forEach((c) => {
+    c.onclick = () => {
+      fbDraft.type = fbDraft.type === c.dataset.type ? null : c.dataset.type;   // 다시 누르면 해제
+      back.querySelectorAll('.fb-chip').forEach((x) => x.setAttribute('aria-pressed', x.dataset.type === fbDraft.type));
+    };
+  });
+  back.querySelector('[data-cancel]').onclick = done;
+  back.onclick = (ev) => { if (ev.target === back) done(); };
+  ok.onclick = async () => {
+    ok.disabled = true; ok.textContent = '보내는 중…'; err.hidden = true;
+    try {
+      await addDoc(collection(db, 'feedback'), {
+        uid: user.uid, email: user.email || '', type: fbDraft.type, text: ta.value.trim().slice(0, 2000),
+        screen, hash, device, status: 'new', createdAt: Date.now(),
+      });
+      fbDraft = { type: null, text: '' };
+      done(); toast('보냈어요. 고마워요!');
+    } catch {
+      err.textContent = '보내지 못했어요. 잠시 후 다시 시도해 주세요. 쓴 내용은 그대로 남아 있어요.'; err.hidden = false;
+      ok.textContent = '다시 보내기'; ok.disabled = false;
+    }
+  };
+  sync();
+  ta.focus();
+}
+$('#fbBtn').onclick = openFeedback;
+
+// ---------- 관리자: 의견함 ----------
+function adminTabs(on) {
+  const n = feedback.filter((f) => f.status === 'new').length;
+  return `<div class="seg" role="tablist" aria-label="관리자 메뉴">
+    <a role="tab" class="seg-btn ${on === 'users' ? 'on' : ''}" aria-selected="${on === 'users'}" href="#/admin" style="display:inline-flex;align-items:center;text-decoration:none">사용자</a>
+    <a role="tab" class="seg-btn ${on === 'feedback' ? 'on' : ''}" aria-selected="${on === 'feedback'}" href="#/admin/feedback" style="display:inline-flex;align-items:center;text-decoration:none">의견${n ? `<span class="fb-badge">${n}</span>` : ''}</a>
+  </div>`;
+}
+function updateFbBadge() {
+  const n = feedback.filter((f) => f.status === 'new').length;
+  const b = $('#fbBadge'); b.hidden = !n; b.textContent = n;
+}
+async function loadFeedback() {
+  const s = await getDocs(collection(db, 'feedback'));
+  feedback = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt - a.createdAt);
+  updateFbBadge();
+}
+async function viewFeedback() {
+  const main = $('#main');
+  main.innerHTML = '<div class="status"><span class="spinner"></span>불러오는 중…</div>';
+  try { await loadFeedback(); } catch (e) {
+    main.innerHTML = `<div class="page-head"><h2>관리자</h2></div>${adminTabs('feedback')}<div class="error-box">의견을 불러오지 못했습니다. Firebase 콘솔에 새 보안 규칙(firestore.rules)을 게시했는지 확인해 주세요. (${esc(e.message)})</div>`;
+    return;
+  }
+  const render = () => {
+    main.innerHTML = `
+      <div class="page-head"><h2>관리자</h2><button class="btn ghost h32" id="fbRefresh">새로고침</button></div>
+      ${adminTabs('feedback')}
+      <p class="sub">새로 온 의견이 위에 보여요. 상태를 바꾸면 바로 저장돼요.</p>
+      ${feedback.length ? `<div class="list">${feedback.slice().sort((a, b) => (a.status === 'new' ? 0 : 1) - (b.status === 'new' ? 0 : 1) || b.createdAt - a.createdAt).map((f) => `
+        <div class="item fb-item ${f.status === 'new' ? 'is-new' : ''}">
+          <div class="item-body">
+            <div class="item-title">${f.type ? `<span class="tag fb-${f.type}">${FB_TYPES[f.type]}</span>` : ''}${esc(f.email)}</div>
+            <div class="item-meta">${fmtDate(f.createdAt)} · ${esc(f.screen || '')} · ${esc(f.device || '')}</div>
+            <div class="fb-text">${esc(f.text)}</div>
+          </div>
+          <select data-fb="${f.id}" aria-label="처리 상태">${Object.entries(FB_STATUS).map(([k, v]) => `<option value="${k}" ${f.status === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
+        </div>`).join('')}</div>` : '<div class="card empty"><b>아직 받은 의견이 없어요</b>사용자가 상단 [의견 보내기]로 보내면 여기에 쌓여요.</div>'}`;
+    $('#fbRefresh').onclick = () => viewFeedback();
+    main.querySelectorAll('[data-fb]').forEach((s) => {
+      s.onchange = async () => {
+        const f = feedback.find((x) => x.id === s.dataset.fb), prev = f.status;
+        f.status = s.value;
+        try { await updateDoc(doc(db, 'feedback', f.id), { status: f.status, updatedAt: Date.now() }); toast(`'${FB_STATUS[f.status]}'으로 바꿨어요`); }
+        catch { f.status = prev; toast('바꾸지 못했어요. 인터넷 연결을 확인해 주세요.'); }
+        updateFbBadge(); render(); main.querySelector(`[data-fb="${f.id}"]`)?.focus();
+      };
+    });
+  };
+  render();
 }
 
 // ---------- 기록 내보내기 ----------

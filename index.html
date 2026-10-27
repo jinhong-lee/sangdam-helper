@@ -84,8 +84,15 @@
   @media (max-width: 600px) { .user-mail { display: none; } }
 
   /* 레이아웃 */
-  .layout { display: grid; grid-template-columns: 264px 1fr; align-items: start; min-height: calc(100vh - 56px); }
+  .layout { --side-w: 264px; display: grid; grid-template-columns: var(--side-w) 1fr; align-items: start; min-height: calc(100vh - 56px); }
   @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+  /* 왼쪽 메뉴 폭 조절 손잡이: 끌기, 키보드 ←→, 두 번 클릭하면 기본 폭 */
+  .side-resizer { position: fixed; top: 56px; bottom: 0; left: calc(var(--side-w) - 4px); width: 8px; z-index: 15; cursor: col-resize; touch-action: none; }
+  .side-resizer::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; background: transparent; transition: background .15s; }
+  .side-resizer:hover::after, .side-resizer:focus-visible::after, body.resizing .side-resizer::after { background: var(--primary); }
+  .side-resizer:focus-visible { outline: none; }
+  body.resizing { cursor: col-resize; user-select: none; }
+  @media (max-width: 860px) { .side-resizer { display: none; } }
   .sidebar { position: sticky; top: 56px; min-width: 0; height: calc(100vh - 56px); overflow-y: auto; padding: 20px 16px 40px; background: var(--surface); border-right: 1px solid var(--border); }   /* 화면 왼쪽 끝에 붙은 메뉴 */
   #main { justify-self: center; width: 100%; max-width: 960px; padding: 20px 32px 80px; }   /* 메뉴를 뺀 영역의 가운데 */
   #main { min-width: 0; }
@@ -181,7 +188,7 @@
   body.viewas #moreBtn, body.viewas .item .more, body.viewas .page-head .btn.soft,
   body.viewas #delBtn, body.viewas #editBtn, body.viewas #runBtn, body.viewas #saveBtn, body.viewas #cancelBtn { display: none !important; }
   body.viewas #memo { background: var(--surface-2); cursor: default; }
-  body.viewas #selBtn, body.viewas .nav-trash { display: none !important; }
+  body.viewas #selBtn, body.viewas .nav-trash, body.viewas #fbBtn { display: none !important; }
   .read-meta { font-size: 13px; color: var(--text-2); margin: 0 0 16px; }
   .read-title { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.02em; overflow-wrap: anywhere; }
   .read-field + .read-field { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
@@ -278,6 +285,22 @@
   .batch-row .imp-main { gap: 2px; font-size: 14px; }
   .batch-row .imp-status { margin-top: 0; }
   @media (max-width: 640px) { .trash-item { flex-wrap: wrap; } .trash-item .item-actions { width: 100%; justify-content: flex-end; } }
+  /* 의견 보내기 · 관리자 의견함 */
+  .fb-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+  .fb-chip { height: 30px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); font: inherit; font-size: 13px; color: var(--text-2); cursor: pointer; }
+  .fb-chip:hover { color: var(--text); }
+  .fb-chip[aria-pressed="true"] { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); font-weight: 700; }
+  .fb-input { min-height: 120px; }
+  .fb-ctx { font-size: 12.5px; color: var(--text-2); margin: 8px 0 0; }
+  .fb-warn { font-size: 12.5px; color: var(--accent); margin: 6px 0 0; }
+  .fb-badge { display: inline-block; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 6px; border-radius: 999px; background: var(--error); color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; vertical-align: 1px; }
+  .fb-item { cursor: default; }
+  .fb-item:hover { border-color: var(--border); }
+  .fb-item.is-new { border-color: var(--primary); }
+  .fb-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; margin-top: 6px; }
+  .tag.fb-bug { background: var(--accent-soft); color: var(--accent); }
+  .tag.fb-request { background: var(--primary-soft); color: var(--primary); }
+  .tag.fb-etc { background: var(--surface-2); color: var(--text-2); }
   .empty { text-align: center; padding: 40px 20px; color: var(--text-2); }
   .empty b { display: block; color: var(--text); font-size: 16px; margin-bottom: 6px; }
 
@@ -379,12 +402,14 @@
       <a class="logo" href="#/"><img src="favicon.svg" alt="" width="28" height="28">농지니</a>
       <span class="viewas-badge" id="viewasBadge" hidden>👀 <b id="viewasName"></b> 화면 보는 중 · 읽기 전용 <button class="btn h32" id="viewasExit">나가기</button></span>
       <span class="user-mail" id="userMail"></span>
-      <a class="btn ghost small" href="#/admin" id="adminLink" hidden>관리자</a>
+      <button class="btn ghost small" id="fbBtn">의견 보내기</button>
+      <a class="btn ghost small" href="#/admin" id="adminLink" hidden>관리자<span class="fb-badge" id="fbBadge" hidden></span></a>
       <a class="btn ghost small" href="#/settings">설정</a>
       <button class="btn ghost small" id="logoutBtn">로그아웃</button>
     </div>
   </header>
   <div class="layout">
+    <div class="side-resizer" id="sideResizer" role="separator" aria-orientation="vertical" aria-label="메뉴 폭 조절" tabindex="0" title="끌어서 메뉴 폭 조절 · 두 번 클릭하면 기본 폭"></div>
     <aside class="sidebar">
       <div class="nav-search">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>
