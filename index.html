@@ -190,7 +190,8 @@
   body.viewas #moreBtn, body.viewas .item .more, body.viewas .page-head .btn.soft,
   body.viewas #delBtn, body.viewas #editBtn, body.viewas #runBtn, body.viewas #saveBtn, body.viewas #cancelBtn { display: none !important; }
   body.viewas #pfEdit { display: none !important; }
-  body.viewas #selBtn, body.viewas .nav-trash, body.viewas #fbBtn { display: none !important; }
+  body.viewas .nav-trash, body.viewas #fbBtn, body.viewas .bar-check input { display: none !important; }
+  body.viewas .thumb { pointer-events: none; }
   .read-meta { font-size: 13px; color: var(--text-2); margin: 0 0 16px; }
   .read-title { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.02em; overflow-wrap: anywhere; }
   .read-field + .read-field { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
@@ -275,7 +276,32 @@
   .list-tools .row { gap: 12px; }
   .item .pick { margin-top: 3px; width: 17px; height: 17px; accent-color: var(--primary); flex-shrink: 0; cursor: pointer; }
   .item.picked { border-color: var(--primary); background: var(--primary-soft); }
-  .selbar { position: sticky; bottom: 16px; z-index: 30; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; padding: 10px 12px 10px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,.12); font-size: 14px; }
+  /* 기록 목록: 위 막대(전체 선택 · N건 선택됨 · 작업 버튼) */
+  .list-bar { position: sticky; top: 56px; z-index: 4; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; min-height: 48px; margin: 0 -4px 8px; padding: 6px 4px 6px 16px; background: var(--bg); border-bottom: 1px solid var(--border); }
+  .bar-check { display: inline-flex; align-items: center; gap: 12px; font-size: 14px; color: var(--text-2); cursor: pointer; }
+  .bar-check input { width: 18px; height: 18px; margin: 0; accent-color: var(--primary); cursor: pointer; }
+  .list-bar.active .bar-check { color: var(--text); }
+  .bar-actions { gap: 6px; }
+  /* 기록 카드: 썸네일 · 제목 + 날짜 + 상태 · 한 줄 미리보기 */
+  .list .item { align-items: center; padding: 12px 12px 12px 16px; }
+  .thumb { position: relative; flex-shrink: 0; width: 44px; height: 44px; padding: 0; border: 1px solid var(--border); border-radius: 12px; display: grid; place-items: center; cursor: pointer; transition: background .15s, border-color .15s, color .15s; }
+  .thumb.journal { background: var(--primary-soft); color: var(--primary); }
+  .thumb.analysis { background: var(--accent-soft); color: var(--accent); }
+  .thumb > span { grid-area: 1 / 1; display: grid; place-items: center; transition: opacity .12s; }
+  .thumb-check { opacity: 0; }
+  .thumb:hover .thumb-icon, .thumb:focus-visible .thumb-icon, .thumb[aria-pressed="true"] .thumb-icon { opacity: 0; }
+  .thumb:hover .thumb-check, .thumb:focus-visible .thumb-check { opacity: 1; }
+  .thumb:hover, .thumb:focus-visible { background: var(--surface-2); color: var(--text-2); border-color: var(--text-2); outline: none; }
+  .thumb[aria-pressed="true"] { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+  .thumb[aria-pressed="true"] .thumb-check { opacity: 1; }
+  .item-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+  .it-name { font-weight: 700; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .it-date { flex-shrink: 0; font-size: 12.5px; font-weight: 400; color: var(--text-2); }
+  .it-state { flex-shrink: 0; align-self: center; font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 4px; background: var(--surface-2); color: var(--text-2); }
+  .it-state.done { background: var(--primary-soft); color: var(--primary); }
+  .item-line { display: flex; gap: 8px; margin-top: 3px; font-size: 13px; min-width: 0; }
+  .item-line b { flex-shrink: 0; font-weight: 600; color: var(--text); }
+  .it-preview { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
   .item-actions { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
   .trash-left { color: var(--accent); }
   .tag.client { background: var(--surface-2); color: var(--text-2); }

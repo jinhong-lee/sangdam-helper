@@ -665,51 +665,69 @@ function listHTML(list, showClient) {
   curList = { list, showClient };
   return `<div id="listWrap">${listInner()}</div>`;
 }
+// 목록 카드: 왼쪽 썸네일(종류 아이콘) — 마우스를 올리면 체크 표시, 누르면 선택. 위 막대의 체크박스로 전체 선택/해제.
+const ICON = {
+  journal: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h10l3 3v15H6z"/><path d="M9 9h7M9 13h7M9 17h4"/></svg>',
+  analysis: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m20 20-4.2-4.2M8.5 11h5M11 8.5v5"/></svg>',
+  check: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>',
+};
+const shortDay = (ts) => {
+  const d = new Date(ts), y = new Date().getFullYear();
+  return (d.getFullYear() === y ? '' : `${d.getFullYear()}년 `) + `${d.getMonth() + 1}월 ${d.getDate()}일`;
+};
+const picked = () => sel?.ids || new Set();
 function listInner() {
   const { list, showClient } = curList;
   if (!list.length) return '<div class="card empty"><b>아직 기록이 없습니다</b>오른쪽 위 [+ 상담일지] 또는 [+ 사례 분석]으로 첫 기록을 만들어 보세요.</div>';
-  const on = !!sel, n = on ? sel.ids.size : 0;
+  const ids = picked(), n = ids.size, all = n === list.length;
   return `
-  <div class="list-tools">
-    <span class="sub" style="margin:0">${on ? `${n}건 선택됨` : `기록 ${list.length}건`}</span>
-    <div class="row">${on
-      ? `<button class="link-btn" id="selAll">${n === list.length ? '전체 해제' : '전체 선택'}</button><button class="btn ghost h32" id="selCancel">선택 끝내기</button>`
-      : '<button class="btn ghost h32" id="selBtn">선택</button>'}</div>
+  <div class="list-bar${n ? ' active' : ''}">
+    <label class="bar-check">
+      <input type="checkbox" id="selAll" ${all ? 'checked' : ''} data-mixed="${n && !all ? 1 : 0}" aria-label="${all ? '전체 해제' : '전체 선택'}">
+      <span>${n ? `<b>${n}</b>건 선택됨` : `기록 ${list.length}건`}</span>
+    </label>
+    ${n ? `<div class="row bar-actions">
+      <button class="btn h32" id="selGen">결과 만들기</button>
+      <button class="btn danger h32" id="selDel">삭제</button>
+      <button class="btn ghost h32" id="selCancel">취소</button>
+    </div>` : ''}
   </div>
-  <div class="list${on ? ' selecting' : ''}">${list.map((r) => `
-    <div class="item${on && sel.ids.has(r.id) ? ' picked' : ''}" data-open="${r.id}">
-      ${on ? `<input type="checkbox" class="pick" data-pick="${r.id}" ${sel.ids.has(r.id) ? 'checked' : ''} aria-label="${esc(r.title)} 선택">` : ''}
+  <div class="list${n ? ' selecting' : ''}">${list.map((r) => {
+    const on = ids.has(r.id);
+    return `
+    <div class="item${on ? ' picked' : ''}" data-open="${r.id}">
+      <button type="button" class="thumb ${r.type}" data-pick="${r.id}" aria-pressed="${on}" aria-label="${esc(r.title)} 선택">
+        <span class="thumb-icon">${ICON[r.type] || ICON.journal}</span><span class="thumb-check">${ICON.check}</span>
+      </button>
       <div class="item-body">
-        <div class="item-title"><span class="tag ${r.type}">${TYPE[r.type]}</span>${esc(r.title)}</div>
-        <div class="item-meta">${showClient ? esc(clientName(r.clientId)) + ' · ' : ''}${recDate(r)}</div>
-        <div class="item-preview">${esc(plain(r.result).slice(0, 160)) || '(아직 결과 없음)'}</div>
+        <div class="item-title">
+          <span class="it-name">${esc(r.title)}</span>
+          <span class="it-date" title="${esc(recDate(r))}">${shortDay(r.createdAt || r.writtenAt || r.updatedAt)}</span>
+          <span class="it-state ${r.result ? 'done' : ''}">${r.result ? '결과 있음' : '결과 없음'}</span>
+        </div>
+        <div class="item-line">${showClient ? `<b>${esc(clientName(r.clientId))}</b>` : `<b>${TYPE[r.type]}</b>`}<span class="it-preview">${esc(plain(r.result || recordText(r)).slice(0, 200))}</span></div>
       </div>
-      ${on ? '' : `<div class="more">
+      <div class="more">
         <button class="more-btn" data-more aria-haspopup="menu" aria-expanded="false" aria-label="기록 메뉴">⋯</button>
         <div class="more-menu right" role="menu" hidden>
           <button role="menuitem" data-dup="${r.id}">복제</button>
           <button role="menuitem" class="danger" data-del="${r.id}">삭제</button>
         </div>
-      </div>`}
-    </div>`).join('')}</div>
-  ${on ? `<div class="selbar" role="region" aria-label="선택한 기록 작업">
-    <span><b>${n}</b>건 선택</span>
-    <div class="row">
-      <button class="btn h32" id="selGen" ${n ? '' : 'disabled'}>결과 만들기${n ? ` ${n}건` : ''}</button>
-      <button class="btn danger h32" id="selDel" ${n ? '' : 'disabled'}>삭제${n ? ` ${n}건` : ''}</button>
-    </div>
-  </div>` : ''}`;
+      </div>
+    </div>`;
+  }).join('')}</div>`;
 }
 function renderList(focusId) {
   const w = $('#listWrap'); if (!w) return;
   paint(w, listInner()); bindList();
+  const box = $('#selAll'); if (box) box.indeterminate = box.dataset.mixed === '1';
   if (focusId) w.querySelector(`[data-pick="${focusId}"]`)?.focus();
 }
-function togglePick(id, on = !sel.ids.has(id)) {
-  if (on) sel.ids.add(id); else sel.ids.delete(id);
+function togglePick(id, on) {
+  if (!sel) sel = { ids: new Set() };
+  if (on ?? !sel.ids.has(id)) sel.ids.add(id); else sel.ids.delete(id);
   renderList(id);
 }
-
 // ⋯ 메뉴 공용: 하나만 열리고, 바깥 클릭·ESC로 닫힘
 function closeMenus() {
   document.querySelectorAll('.more-menu:not([hidden])').forEach((m) => {
@@ -730,19 +748,19 @@ document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeMen
 function bindList() {
   $('#main').querySelectorAll('[data-open]').forEach((el) => {
     el.onclick = (e) => {
-      if (sel) { if (!e.target.closest('input')) togglePick(el.dataset.open); return; }   // 선택 중에는 열지 않고 고르기만
-      if (!e.target.closest('button, .more')) location.hash = '#/r/' + el.dataset.open;
+      if (e.target.closest('.thumb, button, .more')) return;
+      if (picked().size) { togglePick(el.dataset.open); return; }   // 하나라도 고른 동안에는 카드를 눌러도 고르기 (실수로 열려 선택이 풀리지 않게)
+      location.hash = '#/r/' + el.dataset.open;
     };
   });
-  $('#main').querySelectorAll('[data-pick]').forEach((cb) => { cb.onchange = () => togglePick(cb.dataset.pick, cb.checked); });
-  on('#selBtn', 'click', () => { sel = { ids: new Set() }; renderList(); });
-  on('#selCancel', 'click', () => { sel = null; renderList(); $('#selBtn')?.focus(); });
-  on('#selAll', 'click', () => {
-    const all = sel.ids.size === curList.list.length;
-    sel.ids = new Set(all ? [] : curList.list.map((r) => r.id)); renderList();
+  $('#main').querySelectorAll('[data-pick]').forEach((b) => { b.onclick = () => togglePick(b.dataset.pick); });
+  on('#selAll', 'change', () => {
+    const all = picked().size === curList.list.length;
+    sel = { ids: new Set(all ? [] : curList.list.map((r) => r.id)) }; renderList(); $('#selAll')?.focus();
   });
-  on('#selGen', 'click', () => openBatchRun(curList.list.filter((r) => sel.ids.has(r.id))));
-  on('#selDel', 'click', () => trashRecords([...sel.ids]));
+  on('#selCancel', 'click', () => { sel = null; renderList(); $('#selAll')?.focus(); });
+  on('#selGen', 'click', () => openBatchRun(curList.list.filter((r) => picked().has(r.id))));
+  on('#selDel', 'click', () => trashRecords([...picked()]));
   $('#main').querySelectorAll('.item [data-more]').forEach((b) => { b.onclick = () => toggleMenu(b); });
   $('#main').querySelectorAll('[data-dup]').forEach((b) => { b.onclick = () => { closeMenus(); duplicate(b.dataset.dup); }; });
   $('#main').querySelectorAll('[data-del]').forEach((b) => { b.onclick = () => { closeMenus(); removeRecord(b.dataset.del); }; });
