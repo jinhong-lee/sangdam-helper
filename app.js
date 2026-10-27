@@ -19,8 +19,10 @@ const TRASH_DAYS = 30;   // 쓰레기통 보관 기간. 지난 것은 앱을 열
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const fmtDate = (ts) => new Date(ts).toLocaleString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-const fmtDay = (ts) => new Date(ts).toLocaleDateString('ko-KR');
+// 서비스 공통 날짜 형식: yy.mm.dd hh:mm (시간이 필요 없으면 yy.mm.dd)
+const p2 = (n) => String(n).padStart(2, '0');
+const fmtDay = (ts) => { const d = new Date(ts); return `${p2(d.getFullYear() % 100)}.${p2(d.getMonth() + 1)}.${p2(d.getDate())}`; };
+const fmtDate = (ts) => { const d = new Date(ts); return `${fmtDay(d)} ${p2(d.getHours())}:${p2(d.getMinutes())}`; };
 // 기록의 날짜 표시: createdAt은 정렬용(여러 회기 저장 시 회기 날짜), writtenAt은 실제 작성 시각, editedAt은 사람이 [내용 저장]으로 고친 시각.
 // AI 생성·다시 생성은 수정으로 치지 않음. 예전 기록(writtenAt 없음)은 마지막 저장 시각(updatedAt)으로 표시.
 const recDate = (r) => r.editedAt ? `${fmtDate(r.editedAt)} (수정)` : fmtDate(r.writtenAt || r.updatedAt || r.createdAt);
@@ -495,7 +497,7 @@ function ageOf(iso) {
   if (t.getMonth() + 1 < +m[2] || (t.getMonth() + 1 === +m[2] && t.getDate() < +m[3])) a--;
   return a >= 0 && a < 130 ? a : null;
 }
-const dotDate = (iso) => (iso || '').replace(/-/g, '.');
+const dotDate = (iso) => { const m = /^\d{2}(\d{2})-(\d{2})-(\d{2})$/.exec(iso || ''); return m ? `${m[1]}.${m[2]}.${m[3]}` : (iso || ''); };
 const birthText = (iso) => { const a = ageOf(iso); return dotDate(iso) + (a === null ? '' : ` (만 ${a}세)`); };
 // "20180305" / "2018-03-05" / "2018.3.5" → "2018-03-05", 틀리면 null
 function parseDate8(v) {
@@ -671,10 +673,7 @@ const ICON = {
   analysis: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m20 20-4.2-4.2M8.5 11h5M11 8.5v5"/></svg>',
   check: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>',
 };
-const shortDay = (ts) => {
-  const d = new Date(ts), y = new Date().getFullYear();
-  return (d.getFullYear() === y ? '' : `${d.getFullYear()}년 `) + `${d.getMonth() + 1}월 ${d.getDate()}일`;
-};
+const shortDay = fmtDay;
 const picked = () => sel?.ids || new Set();
 function listInner() {
   const { list, showClient } = curList;
@@ -812,10 +811,7 @@ function parseHeader(line) {
   }
   return { n, ts, hasTime: h != null };
 }
-function stampOf(ts, withTime) {
-  const d = new Date(ts), p2 = (x) => String(x).padStart(2, '0');
-  return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}` + (withTime ? ` ${p2(d.getHours())}:${p2(d.getMinutes())}` : '');
-}
+function stampOf(ts, withTime) { return withTime ? fmtDate(ts) : fmtDay(ts); }
 function sessionTitle(n, ts, hasTime) {
   return [n ? `${n}회기` : '', ts ? stampOf(ts, hasTime) : ''].filter(Boolean).join(' · ') || '상담일지';
 }
@@ -1622,10 +1618,7 @@ function openBatchRun(list) {
 }
 
 // ---------- 작성 · 수정 화면 ----------
-function nowStamp() {
-  const d = new Date(), p = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
-}
+function nowStamp() { return fmtDate(Date.now()); }
 function defaultTitle(clientId, type) {
   if (type === 'journal') return `${clientRecords(clientId).filter((r) => r.type === 'journal').length + 1}회기 · ${nowStamp()}`;
   return nowStamp();

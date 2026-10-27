@@ -261,7 +261,8 @@
   .title-input:hover { border-color: var(--border); }
 
   /* 기록 목록 */
-  .list { display: grid; gap: 10px; }
+  .list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .list > * { min-width: 0; }
   .item { display: flex; gap: 14px; align-items: flex-start; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; cursor: pointer; }
   .item:hover { border-color: var(--primary); }
   .item-body { flex: 1; min-width: 0; }
