@@ -324,7 +324,9 @@
   .pf-field input:focus, .pf-field textarea:focus, .pf-field select:focus { outline: none; }
   .pf-field:focus-within label { color: var(--primary); }
   .pf-field select { appearance: none; -webkit-appearance: none; height: auto; cursor: pointer; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%236B665E' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right center; padding-right: 28px; }
-  .pf-actions { padding: 12px 26px 22px; }
+  .pf-actions { position: relative; padding: 12px 26px 22px; background: var(--surface); border-radius: 0 0 20px 20px; }
+  .pf-actions::before { content: ""; position: absolute; left: 0; right: 0; bottom: 100%; height: 40px; pointer-events: none; background: linear-gradient(to bottom, transparent, var(--surface)); opacity: 0; transition: opacity .2s; }
+  .pf-actions.more::before { opacity: 1; }
   .pf-actions .field-error { margin: 0 0 8px; }
   .pf-save { height: 52px; font-size: 16px; border-radius: 12px; }
   .pf-save:disabled { background: var(--surface-2); color: var(--text-2); opacity: 1; }

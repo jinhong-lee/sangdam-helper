@@ -543,7 +543,7 @@ function openProfileModal(c) {
   back.innerHTML = `
     <div class="modal pf-modal" role="dialog" aria-modal="true" aria-labelledby="pfTitle">
       <div class="pf-modal-head">
-        <h3 id="pfTitle">${esc(c.name)} 정보</h3>
+        <h3 id="pfTitle">내담자 정보</h3>
         <button class="pf-close" data-cancel aria-label="닫기"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
       </div>
       <div class="modal-body pf-body">
@@ -604,7 +604,12 @@ function openProfileModal(c) {
       ok.textContent = '저장하기'; ok.disabled = false;
     }
   };
-  sync();
+  // 아래에 더 있으면 저장 버튼 위에 옅은 그라디언트로 암시
+  const body = back.querySelector('.pf-body'), acts = back.querySelector('.pf-actions');
+  const fade = () => acts.classList.toggle('more', body.scrollHeight - body.scrollTop - body.clientHeight > 4);
+  body.addEventListener('scroll', fade, { passive: true });
+  els.forEach((e) => e.addEventListener('input', fade));
+  sync(); fade();
   back.querySelector('#pf_birth')?.focus();
 }
 
