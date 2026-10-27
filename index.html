@@ -360,6 +360,7 @@
   .pf-save { height: 52px; font-size: 16px; border-radius: 12px; }
   .pf-save:disabled { background: var(--surface-2); color: var(--text-2); opacity: 1; }
   /* 의견 보내기 · 관리자 의견함 */
+  @media (max-width: 420px) { .fb-long { display: none; } }   /* 아주 좁은 화면에선 '의견 보내기'만 */
   .fb-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
   .fb-chip { height: 30px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); font: inherit; font-size: 13px; color: var(--text-2); cursor: pointer; }
   .fb-chip:hover { color: var(--text); }
@@ -478,7 +479,7 @@
       <a class="logo" href="#/"><img src="favicon.svg" alt="" width="28" height="28">농지니</a>
       <span class="viewas-badge" id="viewasBadge" hidden>👀 <b id="viewasName"></b> 화면 보는 중 · 읽기 전용 <button class="btn h32" id="viewasExit">나가기</button></span>
       <span class="user-mail" id="userMail"></span>
-      <button class="btn ghost small" id="fbBtn">의견 보내기</button>
+      <button class="btn ghost small" id="fbBtn"><span class="fb-long">농지에게 </span>의견 보내기</button>
       <a class="btn ghost small" href="#/admin" id="adminLink" hidden>관리자<span class="fb-badge" id="fbBadge" hidden></span></a>
       <a class="btn ghost small" href="#/settings">설정</a>
       <button class="btn ghost small" id="logoutBtn">로그아웃</button>

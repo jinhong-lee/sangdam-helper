@@ -1166,7 +1166,7 @@ function openFeedback() {
   back.innerHTML = `
     <div class="modal modal-sm" role="dialog" aria-modal="true" aria-labelledby="fbTitle">
       <div class="modal-body">
-        <h3 id="fbTitle">의견 보내기</h3>
+        <h3 id="fbTitle">농지에게 의견 보내기</h3>
         <p class="sub">불편한 점이나 있었으면 하는 기능을 편하게 적어주세요.</p>
         <div class="fb-chips" role="group" aria-label="종류 (선택)">${Object.entries(FB_TYPES).map(([k, v]) => `<button type="button" class="fb-chip" data-type="${k}" aria-pressed="${fbDraft.type === k}">${v}</button>`).join('')}</div>
         <textarea class="fb-input" id="fbText" maxlength="2000" aria-label="의견 내용" placeholder="예) 결과 만들기를 누르면 너무 오래 걸려요">${esc(fbDraft.text)}</textarea>
@@ -1250,7 +1250,7 @@ async function viewFeedback() {
             <div class="fb-text">${esc(f.text)}</div>
           </div>
           <select data-fb="${f.id}" aria-label="처리 상태">${Object.entries(FB_STATUS).map(([k, v]) => `<option value="${k}" ${f.status === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
-        </div>`).join('')}</div>` : '<div class="card empty"><b>아직 받은 의견이 없어요</b>사용자가 상단 [의견 보내기]로 보내면 여기에 쌓여요.</div>'}`;
+        </div>`).join('')}</div>` : '<div class="card empty"><b>아직 받은 의견이 없어요</b>사용자가 상단 [농지에게 의견 보내기]로 보내면 여기에 쌓여요.</div>'}`;
     $('#fbRefresh').onclick = () => viewFeedback();
     main.querySelectorAll('[data-fb]').forEach((s) => {
       s.onchange = async () => {
