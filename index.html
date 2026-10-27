@@ -181,6 +181,7 @@
   body.viewas #moreBtn, body.viewas .item .more, body.viewas .page-head .btn.soft,
   body.viewas #delBtn, body.viewas #editBtn, body.viewas #runBtn, body.viewas #saveBtn, body.viewas #cancelBtn { display: none !important; }
   body.viewas #memo { background: var(--surface-2); cursor: default; }
+  body.viewas #selBtn, body.viewas .nav-trash { display: none !important; }
   .read-meta { font-size: 13px; color: var(--text-2); margin: 0 0 16px; }
   .read-title { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.02em; overflow-wrap: anywhere; }
   .read-field + .read-field { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
@@ -260,6 +261,23 @@
   .tag { display: inline-block; font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-right: 6px; vertical-align: 1px; }
   .tag.analysis { background: var(--accent-soft); color: var(--accent); }
   .tag.journal { background: var(--primary-soft); color: var(--primary); }
+  /* 기록 선택 · 쓰레기통 */
+  .list-tools { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .list-tools .row { gap: 12px; }
+  .item .pick { margin-top: 3px; width: 17px; height: 17px; accent-color: var(--primary); flex-shrink: 0; cursor: pointer; }
+  .item.picked { border-color: var(--primary); background: var(--primary-soft); }
+  .selbar { position: sticky; bottom: 16px; z-index: 30; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; padding: 10px 12px 10px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,.12); font-size: 14px; }
+  .item-actions { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
+  .trash-left { color: var(--accent); }
+  .tag.client { background: var(--surface-2); color: var(--text-2); }
+  .nav a.nav-trash { margin-top: 10px; border-top: 1px solid var(--border); border-radius: 0 0 9px 9px; padding-top: 10px; color: var(--text-2); }
+  .nav a.nav-trash.on { color: var(--primary); }
+  @media (max-width: 860px) { .nav a.nav-trash { margin-top: 0; border-radius: 9px; padding-top: 8px; border: 1px solid var(--border); } }
+  select { font: inherit; font-size: 13px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; height: 32px; padding: 0 8px; }
+  .batch-row { align-items: center; }
+  .batch-row .imp-main { gap: 2px; font-size: 14px; }
+  .batch-row .imp-status { margin-top: 0; }
+  @media (max-width: 640px) { .trash-item { flex-wrap: wrap; } .trash-item .item-actions { width: 100%; justify-content: flex-end; } }
   .empty { text-align: center; padding: 40px 20px; color: var(--text-2); }
   .empty b { display: block; color: var(--text); font-size: 16px; margin-bottom: 6px; }
 
@@ -326,6 +344,8 @@
     opacity: 0; transition: .2s; pointer-events: none; z-index: 20;
   }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.act { pointer-events: auto; display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 18px; }
+  .toast-btn { border: 0; background: transparent; color: var(--bg); font: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; padding: 4px 10px; border-radius: 999px; }
 </style>
 </head>
 <body>

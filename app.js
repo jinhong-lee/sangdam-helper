@@ -15,6 +15,7 @@ const ADMINS = ['leejjinhong@gmail.com'];
 const isAdminUser = () => !!user && ADMINS.includes(user.email);
 const SHORT = { analysis: '사례', journal: '일지' }; // 다시 생성 버튼용 짧은 이름
 const HISTORY_COUNT = 3;
+const TRASH_DAYS = 30;   // 쓰레기통 보관 기간. 지난 것은 앱을 열 때 영구 삭제 (서버 기능 없이 처리 → 추가 비용 없음)
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -26,8 +27,18 @@ const recDate = (r) => r.editedAt ? `${fmtDate(r.editedAt)} (수정)` : fmtDate(
 const plain = (md) => (md || '').replace(/[#*|>`_-]+/g, ' ').replace(/\s+/g, ' ').trim();
 
 function toast(msg) {
-  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  const t = $('#toast'); t.textContent = msg; t.classList.remove('act'); t.classList.add('show');
   clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove('show'), 2000);
+}
+// 되돌리기 버튼이 붙은 알림 (삭제 직후 등)
+function toastAction(msg, label, fn) {
+  const t = $('#toast');
+  t.innerHTML = `<span>${esc(msg)}</span><button class="toast-btn">${esc(label)}</button>`;
+  t.classList.add('show', 'act');
+  clearTimeout(toast.timer);
+  const hide = () => t.classList.remove('show', 'act');
+  toast.timer = setTimeout(hide, 6000);
+  t.querySelector('button').onclick = async () => { clearTimeout(toast.timer); hide(); await fn(); };
 }
 function show(view) {
   ['#bootView', '#loginView', '#appView'].forEach((v) => $(v).classList.toggle('hidden', v !== view));
@@ -42,7 +53,12 @@ let auth, db, user = null;
 let profile = {};
 let clients = [];
 let records = [];
+let trash = [];          // 쓰레기통에 있는 기록 (deletedAt 있음)
+let trashClients = [];   // 쓰레기통에 있는 내담자
 let models = null;
+let sel = null;          // 기록 선택 모드: { ids: Set }
+let curList = null;      // 지금 화면의 기록 목록 { list, showClient }
+let batchRun = null;     // 여러 기록 결과 만들기 진행 중
 let editor = null;    // 작성 중인 기록
 let running = null;   // 진행 중인 생성 요청
 const prefs = loadPrefs();
@@ -108,9 +124,29 @@ async function loadData() {
   }
   profile.geminiKey = key;
   const [cs, rs] = await Promise.all([getDocs(userCol('clients')), getDocs(userCol('records'))]);
-  clients = cs.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => a.name.localeCompare(b.name, 'ko'));
-  records = rs.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt - a.createdAt);
+  const allC = cs.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const allR = rs.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const cutoff = Date.now() - TRASH_DAYS * 864e5;
+  const expired = (x) => x.deletedAt && x.deletedAt < cutoff;
+  const ops = [
+    ...allC.filter(expired).map((c) => (b) => b.delete(userDoc('clients', c.id))),
+    ...allR.filter(expired).map((r) => (b) => b.delete(userDoc('records', r.id))),
+  ];
+  if (ops.length) commitOps(ops).catch(() => {});   // 실패해도 다음에 열 때 다시 정리
+  clients = allC.filter((c) => !c.deletedAt).sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+  records = allR.filter((r) => !r.deletedAt).sort((a, b) => b.createdAt - a.createdAt);
+  trashClients = allC.filter((c) => c.deletedAt && !expired(c));
+  trash = allR.filter((r) => r.deletedAt && !expired(r));
   models = null;
+}
+
+// 여러 문서를 한 번에 쓰기 (한 번에 500개 제한이 있어 나눠서)
+async function commitOps(ops) {
+  for (let i = 0; i < ops.length; i += 400) {
+    const b = writeBatch(db);
+    ops.slice(i, i + 400).forEach((op) => op(b));
+    await b.commit();
+  }
 }
 
 // ---------- 로그인 ----------
@@ -162,7 +198,7 @@ window.addEventListener('hashchange', async () => {
   route();
 });
 window.addEventListener('beforeunload', (e) => {
-  if (editor?.dirty || editor?.saveState === 'saving') { e.preventDefault(); e.returnValue = ''; }
+  if (editor?.dirty || editor?.saveState === 'saving' || batchRun) { e.preventDefault(); e.returnValue = ''; }
 });
 // Cmd/Ctrl+S로 즉시 저장
 document.addEventListener('keydown', (ev) => {
@@ -176,12 +212,14 @@ function route() {
   clearTimeout(autoT);
   closeMenus();
   editor = null;
+  sel = null;
   const [, page, a, b] = (location.hash || '#/').split('/');
   if (viewAs && (page === 'settings' || page === 'admin')) exitViewAs();   // 설정·관리자로 가면 내 화면으로 돌아옴
   if (page === 'admin' && a && isAdminUser()) { enterViewAs(a); return; }
   if (page === 'c' && clients.some((c) => c.id === a)) viewClient(a);
   else if (page === 'new' && !viewAs && clients.some((c) => c.id === a) && TYPE[b]) openEditor({ clientId: a, type: b });
   else if (page === 'r' && records.some((r) => r.id === a)) openEditor(records.find((r) => r.id === a));
+  else if (page === 'trash' && !viewAs) viewTrash();
   else if (page === 'settings') viewSettings();
   else if (page === 'admin' && isAdminUser()) viewAdmin(a);
   else viewHome();
@@ -227,6 +265,7 @@ function renderNav() {
       </div>`;
     }).join('')}
     ${q && !groups.length ? '<div class="nav-empty">검색 결과가 없습니다</div>' : ''}
+    ${!q && !viewAs ? `<a href="#/trash" class="nav-trash ${page === 'trash' ? 'on' : ''}"><span>쓰레기통</span> <span class="cnt">${trashRows().length}</span></a>` : ''}
 `;
   $('#nav').querySelectorAll('[data-tw]').forEach((b) => {
     b.onclick = () => { navToggled.set(b.dataset.tw, b.getAttribute('aria-expanded') !== 'true'); renderNav(); };
@@ -363,15 +402,19 @@ function viewClient(id) {
   };
   $('#delClientBtn').onclick = async () => {
     closeMenu();
-    if (!(await confirmDelete('내담자 삭제', `"${c.name}"와 이 내담자의 기록 ${list.length}건을 모두 삭제합니다.`))) return;
-    const batch = writeBatch(db);
-    list.forEach((r) => batch.delete(userDoc('records', r.id)));
-    batch.delete(userDoc('clients', id));
-    await batch.commit();
-    records = records.filter((r) => r.clientId !== id);
-    clients = clients.filter((x) => x.id !== id);
-    toast('삭제했습니다');
+    if (!(await confirmModal({ title: '내담자 삭제', message: `"${c.name}"와 이 내담자의 기록 ${list.length}건을 쓰레기통으로 옮깁니다. ${TRASH_DAYS}일 안에는 쓰레기통에서 복구할 수 있어요.`, okLabel: '쓰레기통으로 옮기기', danger: true }))) return;
+    const now = Date.now();
+    try {
+      await commitOps([(b) => b.update(userDoc('clients', id), { deletedAt: now }), ...list.map((r) => (b) => b.update(userDoc('records', r.id), { deletedAt: now }))]);
+    } catch { return toast('삭제하지 못했습니다. 인터넷 연결을 확인해 주세요.'); }
+    c.deletedAt = now; list.forEach((r) => (r.deletedAt = now));
+    records = records.filter((r) => r.clientId !== id); trash.push(...list);
+    clients = clients.filter((x) => x.id !== id); trashClients.push(c);
     location.hash = '#/';
+    toastAction(`"${c.name}"를 쓰레기통으로 옮겼어요`, '되돌리기', async () => {
+      await restoreItems([{ kind: 'client', id: c.id, item: c, clientId: c.id, deletedAt: now }]);
+      toast('되돌렸어요'); location.hash = '#/c/' + c.id; route();
+    });
   };
   bindList();
 }
@@ -403,22 +446,52 @@ function viewHome() {
 
 // ---------- 기록 목록 ----------
 function listHTML(list, showClient) {
+  curList = { list, showClient };
+  return `<div id="listWrap">${listInner()}</div>`;
+}
+function listInner() {
+  const { list, showClient } = curList;
   if (!list.length) return '<div class="card empty"><b>아직 기록이 없습니다</b>오른쪽 위 [+ 상담일지] 또는 [+ 사례 분석]으로 첫 기록을 만들어 보세요.</div>';
-  return `<div class="list">${list.map((r) => `
-    <div class="item" data-open="${r.id}">
+  const on = !!sel, n = on ? sel.ids.size : 0;
+  return `
+  <div class="list-tools">
+    <span class="sub" style="margin:0">${on ? `${n}건 선택됨` : `기록 ${list.length}건`}</span>
+    <div class="row">${on
+      ? `<button class="link-btn" id="selAll">${n === list.length ? '전체 해제' : '전체 선택'}</button><button class="btn ghost h32" id="selCancel">선택 끝내기</button>`
+      : '<button class="btn ghost h32" id="selBtn">선택</button>'}</div>
+  </div>
+  <div class="list${on ? ' selecting' : ''}">${list.map((r) => `
+    <div class="item${on && sel.ids.has(r.id) ? ' picked' : ''}" data-open="${r.id}">
+      ${on ? `<input type="checkbox" class="pick" data-pick="${r.id}" ${sel.ids.has(r.id) ? 'checked' : ''} aria-label="${esc(r.title)} 선택">` : ''}
       <div class="item-body">
         <div class="item-title"><span class="tag ${r.type}">${TYPE[r.type]}</span>${esc(r.title)}</div>
         <div class="item-meta">${showClient ? esc(clientName(r.clientId)) + ' · ' : ''}${recDate(r)}</div>
         <div class="item-preview">${esc(plain(r.result).slice(0, 160)) || '(아직 결과 없음)'}</div>
       </div>
-      <div class="more">
+      ${on ? '' : `<div class="more">
         <button class="more-btn" data-more aria-haspopup="menu" aria-expanded="false" aria-label="기록 메뉴">⋯</button>
         <div class="more-menu right" role="menu" hidden>
           <button role="menuitem" data-dup="${r.id}">복제</button>
           <button role="menuitem" class="danger" data-del="${r.id}">삭제</button>
         </div>
-      </div>
-    </div>`).join('')}</div>`;
+      </div>`}
+    </div>`).join('')}</div>
+  ${on ? `<div class="selbar" role="region" aria-label="선택한 기록 작업">
+    <span><b>${n}</b>건 선택</span>
+    <div class="row">
+      <button class="btn h32" id="selGen" ${n ? '' : 'disabled'}>결과 만들기${n ? ` ${n}건` : ''}</button>
+      <button class="btn danger h32" id="selDel" ${n ? '' : 'disabled'}>삭제${n ? ` ${n}건` : ''}</button>
+    </div>
+  </div>` : ''}`;
+}
+function renderList(focusId) {
+  const w = $('#listWrap'); if (!w) return;
+  w.innerHTML = listInner(); bindList();
+  if (focusId) w.querySelector(`[data-pick="${focusId}"]`)?.focus();
+}
+function togglePick(id, on = !sel.ids.has(id)) {
+  if (on) sel.ids.add(id); else sel.ids.delete(id);
+  renderList(id);
 }
 
 // ⋯ 메뉴 공용: 하나만 열리고, 바깥 클릭·ESC로 닫힘
@@ -440,8 +513,20 @@ document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeMen
 
 function bindList() {
   $('#main').querySelectorAll('[data-open]').forEach((el) => {
-    el.onclick = (e) => { if (!e.target.closest('button, .more')) location.hash = '#/r/' + el.dataset.open; };
+    el.onclick = (e) => {
+      if (sel) { if (!e.target.closest('input')) togglePick(el.dataset.open); return; }   // 선택 중에는 열지 않고 고르기만
+      if (!e.target.closest('button, .more')) location.hash = '#/r/' + el.dataset.open;
+    };
   });
+  $('#main').querySelectorAll('[data-pick]').forEach((cb) => { cb.onchange = () => togglePick(cb.dataset.pick, cb.checked); });
+  $('#selBtn')?.addEventListener('click', () => { sel = { ids: new Set() }; renderList(); });
+  $('#selCancel')?.addEventListener('click', () => { sel = null; renderList(); $('#selBtn')?.focus(); });
+  $('#selAll')?.addEventListener('click', () => {
+    const all = sel.ids.size === curList.list.length;
+    sel.ids = new Set(all ? [] : curList.list.map((r) => r.id)); renderList();
+  });
+  $('#selGen')?.addEventListener('click', () => openBatchRun(curList.list.filter((r) => sel.ids.has(r.id))));
+  $('#selDel')?.addEventListener('click', () => trashRecords([...sel.ids]));
   $('#main').querySelectorAll('.item [data-more]').forEach((b) => { b.onclick = () => toggleMenu(b); });
   $('#main').querySelectorAll('[data-dup]').forEach((b) => { b.onclick = () => { closeMenus(); duplicate(b.dataset.dup); }; });
   $('#main').querySelectorAll('[data-del]').forEach((b) => { b.onclick = () => { closeMenus(); removeRecord(b.dataset.del); }; });
@@ -755,8 +840,9 @@ async function loadUserData(uid) {
     getDocs(collection(db, 'users', uid, 'records')),
   ]);
   return {
-    clients: cs.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => a.name.localeCompare(b.name, 'ko')),
-    records: rs.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt - a.createdAt),
+    // 쓰레기통에 있는 것은 관리자 집계·화면에서 제외
+    clients: cs.docs.map((d) => ({ id: d.id, ...d.data() })).filter((c) => !c.deletedAt).sort((a, b) => a.name.localeCompare(b.name, 'ko')),
+    records: rs.docs.map((d) => ({ id: d.id, ...d.data() })).filter((r) => !r.deletedAt).sort((a, b) => b.createdAt - a.createdAt),
   };
 }
 const pct = (n, total) => (total ? Math.round((n / total) * 100) + '%' : '-');
@@ -917,16 +1003,261 @@ function confirmDelete(title, message) {
   });
 }
 
+// 기록 삭제: 바로 지우지 않고 쓰레기통으로 (되돌리기 알림 + 30일 보관)
 async function removeRecord(id) {
   const r = records.find((x) => x.id === id);
-  if (!(await confirmDelete('기록 삭제', `"${r.title}" 기록을 삭제합니다.`))) return;
-  await deleteDoc(userDoc('records', id));
-  records = records.filter((x) => x.id !== id);
-  toast('삭제했습니다');
   if (editor) editor.dirty = false;
   clearTimeout(autoT);
+  if (!(await trashRecords([id], false))) return;
   if (location.hash === '#/r/' + id) location.hash = '#/c/' + r.clientId;
   else route();
+}
+async function trashRecords(ids, reroute = true) {
+  const now = Date.now();
+  try {
+    await commitOps(ids.map((id) => (b) => b.update(userDoc('records', id), { deletedAt: now })));
+  } catch { toast('삭제하지 못했습니다. 인터넷 연결을 확인해 주세요.'); return false; }
+  const moved = records.filter((r) => ids.includes(r.id));
+  moved.forEach((r) => (r.deletedAt = now));
+  records = records.filter((r) => !ids.includes(r.id)); trash.push(...moved);
+  if (reroute) route();
+  toastAction(`${ids.length > 1 ? ids.length + '건을' : '기록을'} 쓰레기통으로 옮겼어요`, '되돌리기', async () => {
+    await restoreItems(moved.map((r) => ({ kind: 'record', id: r.id, item: r, clientId: r.clientId })));
+    toast('되돌렸어요'); route();
+  });
+  return true;
+}
+
+// ---------- 쓰레기통 ----------
+const trashKey = (x) => x.kind + ':' + x.id;
+function trashRows() {
+  const rows = trash.map((r) => ({ kind: 'record', id: r.id, item: r, clientId: r.clientId, deletedAt: r.deletedAt }));
+  trashClients.forEach((c) => rows.push({ kind: 'client', id: c.id, item: c, clientId: c.id, deletedAt: c.deletedAt }));
+  // 최근 삭제순, 같은 시각에 지운 것은 내담자 행이 먼저
+  return rows.sort((a, b) => b.deletedAt - a.deletedAt || (a.kind === 'client' ? -1 : b.kind === 'client' ? 1 : 0));
+}
+const anyClientName = (id) => (clients.find((c) => c.id === id) || trashClients.find((c) => c.id === id))?.name || '(알 수 없음)';
+// 내담자와 함께 삭제된 기록 = 같은 시각에 쓰레기통으로 간 그 내담자의 기록
+const codeleted = (c) => trash.filter((r) => r.clientId === c.id && r.deletedAt === c.deletedAt);
+
+// 복구: 기록을 살리면 내담자도 쓰레기통에 있을 때 함께 살림 / 내담자를 살리면 함께 삭제된 기록도 살림
+async function restoreItems(rows) {
+  const recIds = new Set(), cliIds = new Set();
+  rows.forEach((x) => {
+    if (x.kind === 'record') { recIds.add(x.id); if (trashClients.some((c) => c.id === x.clientId)) cliIds.add(x.clientId); }
+    else { cliIds.add(x.id); codeleted(x.item).forEach((r) => recIds.add(r.id)); }
+  });
+  await commitOps([
+    ...[...recIds].map((id) => (b) => b.update(userDoc('records', id), { deletedAt: deleteField() })),
+    ...[...cliIds].map((id) => (b) => b.update(userDoc('clients', id), { deletedAt: deleteField() })),
+  ]);
+  trash.filter((r) => recIds.has(r.id)).forEach((r) => { delete r.deletedAt; records.push(r); });
+  trash = trash.filter((r) => !recIds.has(r.id));
+  trashClients.filter((c) => cliIds.has(c.id)).forEach((c) => { delete c.deletedAt; clients.push(c); });
+  trashClients = trashClients.filter((c) => !cliIds.has(c.id));
+  records.sort((a, b) => b.createdAt - a.createdAt);
+  clients.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+  return recIds.size + cliIds.size;
+}
+// 영구 삭제: 내담자를 지우면 쓰레기통에 남은 그 내담자의 기록도 함께
+async function purgeItems(rows) {
+  const recIds = new Set(), cliIds = new Set();
+  rows.forEach((x) => {
+    if (x.kind === 'record') recIds.add(x.id);
+    else { cliIds.add(x.id); trash.filter((r) => r.clientId === x.id).forEach((r) => recIds.add(r.id)); }
+  });
+  await commitOps([
+    ...[...recIds].map((id) => (b) => b.delete(userDoc('records', id))),
+    ...[...cliIds].map((id) => (b) => b.delete(userDoc('clients', id))),
+  ]);
+  trash = trash.filter((r) => !recIds.has(r.id));
+  trashClients = trashClients.filter((c) => !cliIds.has(c.id));
+}
+
+let trashSel = new Set(), trashFilter = '';
+function viewTrash() {
+  const all = trashRows();
+  if (trashFilter && !all.some((x) => x.clientId === trashFilter)) trashFilter = '';
+  const rows = trashFilter ? all.filter((x) => x.clientId === trashFilter) : all;
+  trashSel = new Set([...trashSel].filter((k) => rows.some((x) => trashKey(x) === k)));
+  const n = trashSel.size;
+  const names = [...new Set(all.map((x) => x.clientId))].map((id) => [id, anyClientName(id)]).sort((a, b) => a[1].localeCompare(b[1], 'ko'));
+  const left = (x) => Math.max(0, Math.ceil((x.deletedAt + TRASH_DAYS * 864e5 - Date.now()) / 864e5));
+  $('#main').innerHTML = `
+    <div class="page-head" style="align-items:center">
+      <h2>쓰레기통</h2>
+      ${all.length ? '<div class="row"><button class="btn ghost h32" id="tRestoreAll">모두 복구</button><button class="btn danger h32" id="tEmpty">쓰레기통 비우기</button></div>' : ''}
+    </div>
+    <p class="sub">삭제한 기록과 내담자는 ${TRASH_DAYS}일 동안 보관한 뒤 자동으로 영구 삭제돼요.</p>
+    ${all.length ? `
+    <div class="list-tools">
+      <div class="row">
+        <label class="check" style="align-items:center"><input type="checkbox" id="tAll" ${n && n === rows.length ? 'checked' : ''}> 전체 선택</label>
+        ${names.length > 1 ? `<select id="tFilter" aria-label="내담자로 거르기"><option value="">모든 내담자</option>${names.map(([id, nm]) => `<option value="${id}" ${id === trashFilter ? 'selected' : ''}>${esc(nm)}</option>`).join('')}</select>` : ''}
+      </div>
+      <div class="row">
+        <button class="btn h32" id="tRestore" ${n ? '' : 'disabled'}>복구${n ? ` ${n}건` : ''}</button>
+        <button class="btn danger h32" id="tPurge" ${n ? '' : 'disabled'}>영구 삭제${n ? ` ${n}건` : ''}</button>
+      </div>
+    </div>
+    <div class="list selecting">${rows.map((x) => {
+      const k = trashKey(x), isC = x.kind === 'client';
+      return `<div class="item trash-item${trashSel.has(k) ? ' picked' : ''}" data-tkey="${k}">
+        <input type="checkbox" class="pick" data-tpick="${k}" ${trashSel.has(k) ? 'checked' : ''} aria-label="${esc(isC ? x.item.name : x.item.title)} 선택">
+        <div class="item-body">
+          <div class="item-title"><span class="tag ${isC ? 'client' : x.item.type}">${isC ? '내담자' : TYPE[x.item.type]}</span>${esc(isC ? x.item.name : x.item.title)}</div>
+          <div class="item-meta">${isC ? `기록 ${codeleted(x.item).length}건과 함께 삭제` : `${esc(anyClientName(x.clientId))}${trashClients.some((c) => c.id === x.clientId) ? ' (삭제된 내담자)' : ''} · 상담 ${fmtDay(x.item.createdAt)}`} · ${fmtDay(x.deletedAt)} 삭제 · <span class="trash-left">${left(x)}일 후 영구 삭제</span></div>
+        </div>
+        <div class="item-actions">
+          <button class="btn ghost small" data-trestore="${k}">복구</button>
+          <button class="btn danger small" data-tpurge="${k}">영구 삭제</button>
+        </div>
+      </div>`;
+    }).join('')}</div>` : `
+    <div class="card empty"><b>쓰레기통이 비어 있어요</b>기록이나 내담자를 삭제하면 여기에 ${TRASH_DAYS}일 동안 보관돼요.</div>`}`;
+
+  const byKey = (k) => rows.find((x) => trashKey(x) === k);
+  const done = (msg) => { trashSel.clear(); viewTrash(); renderNav(); toast(msg); };
+  const restore = async (list) => {
+    try { const cnt = await restoreItems(list); done(`${cnt}건을 복구했어요`); }
+    catch { toast('복구하지 못했습니다. 인터넷 연결을 확인해 주세요.'); }
+  };
+  const purge = async (list, title) => {
+    if (!(await confirmDelete(title, `${list.length}건을 영구 삭제합니다.`))) return;
+    try { await purgeItems(list); done('영구 삭제했어요'); }
+    catch { toast('삭제하지 못했습니다. 인터넷 연결을 확인해 주세요.'); }
+  };
+  $('#main').querySelectorAll('[data-tkey]').forEach((el) => {
+    el.onclick = (e) => {
+      if (e.target.closest('button, input')) return;
+      const k = el.dataset.tkey; trashSel.has(k) ? trashSel.delete(k) : trashSel.add(k); viewTrash();
+      $(`[data-tpick="${k}"]`)?.focus();
+    };
+  });
+  $('#main').querySelectorAll('[data-tpick]').forEach((cb) => {
+    cb.onchange = () => { cb.checked ? trashSel.add(cb.dataset.tpick) : trashSel.delete(cb.dataset.tpick); viewTrash(); $(`[data-tpick="${cb.dataset.tpick}"]`)?.focus(); };
+  });
+  $('#main').querySelectorAll('[data-trestore]').forEach((b) => { b.onclick = () => restore([byKey(b.dataset.trestore)]); });
+  $('#main').querySelectorAll('[data-tpurge]').forEach((b) => { b.onclick = () => purge([byKey(b.dataset.tpurge)], '영구 삭제'); });
+  $('#tAll')?.addEventListener('change', (e) => { trashSel = new Set(e.target.checked ? rows.map(trashKey) : []); viewTrash(); $('#tAll')?.focus(); });
+  $('#tFilter')?.addEventListener('change', (e) => { trashFilter = e.target.value; trashSel.clear(); viewTrash(); $('#tFilter')?.focus(); });
+  $('#tRestore')?.addEventListener('click', () => restore(rows.filter((x) => trashSel.has(trashKey(x)))));
+  $('#tPurge')?.addEventListener('click', () => purge(rows.filter((x) => trashSel.has(trashKey(x))), '영구 삭제'));
+  $('#tRestoreAll')?.addEventListener('click', () => restore(all));
+  $('#tEmpty')?.addEventListener('click', () => purge(all, '쓰레기통 비우기'));
+}
+
+// ---------- 고른 기록 결과 한꺼번에 만들기 ----------
+function openBatchRun(list) {
+  if (!list.length) return;
+  if (!profile.geminiKey) { toast('먼저 설정에서 AI 이용 키를 등록해 주세요'); location.hash = '#/settings'; return; }
+  const opener = document.activeElement;
+  const had = list.filter((r) => r.result).length;
+  const defLenses = prefs.lenses_journal || manifest.lenses.filter((l) => l.journal).map((l) => l.id);
+  const back = document.createElement('div');
+  back.className = 'modal-back';
+  back.innerHTML = `
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="bTitle">
+      <div class="modal-body" id="bBody">
+        <h3 id="bTitle">고른 기록 ${list.length}건 결과 만들기</h3>
+        <p class="sub">적용할 이론을 고르세요. 고른 기록 모두에 같은 이론을 적용합니다.</p>
+        <div class="row" style="margin:-4px 0 6px"><button class="link-btn" data-all>모두 선택</button><button class="link-btn" data-none>모두 해제</button></div>
+        <div id="bLenses">${manifest.lenses.map((l) => `
+          <label class="lens">
+            <input type="checkbox" value="${l.id}" ${defLenses.includes(l.id) ? 'checked' : ''}>
+            <span><span class="num">${l.id.slice(0, 2)}</span> <span class="t">${esc(l.title)}</span><div class="d">${esc(l.desc)}</div></span>
+          </label>`).join('')}</div>
+        <label class="check modal-hist">
+          <input type="checkbox" id="bHistory" checked>
+          <span>이전 기록 참고하기
+            <small>기록마다 그보다 앞선 기록 최대 ${HISTORY_COUNT}건을 함께 보냅니다. 내담자 메모는 항상 함께 참고합니다.</small>
+          </span>
+        </label>
+        ${had ? `<label class="check modal-hist">
+          <input type="checkbox" id="bSkip" checked>
+          <span>이미 결과가 있는 ${had}건은 건너뛰기
+            <small>해제하면 지금 결과가 새 결과로 바뀝니다</small>
+          </span>
+        </label>` : ''}
+        <p class="modal-note" id="bEta"></p>
+      </div>
+      <div class="modal-actions" id="bActions">
+        <button class="btn ghost" data-cancel>취소</button>
+        <button class="btn" data-go></button>
+      </div>
+    </div>`;
+  document.body.appendChild(back);
+  const boxes = () => [...back.querySelectorAll('#bLenses input')];
+  const goBtn = back.querySelector('[data-go]');
+  const targets = () => (back.querySelector('#bSkip')?.checked ? list.filter((r) => !r.result) : list);
+  const sync = () => {
+    const n = targets().length;
+    goBtn.disabled = !n;
+    goBtn.textContent = n ? `${n}건 만들기` : '만들 기록이 없어요';
+    back.querySelector('#bEta').textContent = n
+      ? `약 ${Math.max(1, Math.ceil(n / 2))}~${n}분 걸려요. 오래된 기록부터 하나씩 만들고, 다 된 건은 바로 저장돼요. 창을 닫으면 멈춰요.`
+      : '';
+  };
+  let busy = false;
+  const close = () => {
+    if (busy) return;
+    document.removeEventListener('keydown', onKey); back.remove(); opener?.focus?.();
+  };
+  const onKey = (ev) => { if (ev.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  back.onclick = (ev) => { if (ev.target === back) close(); };
+  back.querySelector('#bLenses').onchange = sync;
+  back.querySelector('#bSkip')?.addEventListener('change', sync);
+  back.querySelector('[data-all]').onclick = () => boxes().forEach((b) => (b.checked = true));
+  back.querySelector('[data-none]').onclick = () => boxes().forEach((b) => (b.checked = false));
+  back.querySelector('[data-cancel]').onclick = close;
+  goBtn.onclick = async () => {
+    const lenses = boxes().filter((b) => b.checked).map((b) => b.value);
+    const useHistory = back.querySelector('#bHistory').checked;
+    const todo = targets().slice().sort((a, b) => a.createdAt - b.createdAt);   // 오래된 기록부터 → 뒤 기록이 앞 기록 결과를 참고
+    busy = true;
+    const ctrl = new AbortController(); batchRun = ctrl;
+    back.querySelector('#bBody').innerHTML = `
+      <h3 id="bTitle">결과 만드는 중</h3>
+      <p class="sub" id="bProg" aria-live="polite"></p>
+      <div class="imp-list">${todo.map((r, i) => `
+        <div class="imp-row batch-row"><div class="imp-main"><b>${esc(r.title)}</b><span class="sub" style="margin:0">${esc(clientName(r.clientId))} · ${fmtDay(r.createdAt)}</span></div><span class="imp-status" data-st="${i}">대기</span></div>`).join('')}</div>`;
+    back.querySelector('#bActions').innerHTML = '<button class="btn ghost" id="bStop">중단</button>';
+    back.querySelector('#bStop').onclick = () => ctrl.abort();
+    const prog = (t) => { back.querySelector('#bProg').textContent = t; };
+    let ok = 0;
+    for (const [i, r] of todo.entries()) {
+      if (ctrl.signal.aborted) break;
+      const st = back.querySelector(`[data-st="${i}"]`);
+      st.innerHTML = '<span class="spinner"></span>'; prog(`${i + 1}/${todo.length}번째 만드는 중… 창을 닫지 마세요`);
+      const job = { ...r, inputs: normInputs(r.type, r.inputs), mode: inferMode(r), lenses, useHistory };
+      let tries = 0;
+      for (;;) {
+        try {
+          const text = await generateText(buildPrompt(job), ctrl.signal);
+          const patch = { result: text, lenses, useHistory, updatedAt: Date.now() };
+          await updateDoc(userDoc('records', r.id), patch);
+          Object.assign(records.find((x) => x.id === r.id) || {}, patch);
+          st.textContent = '✓ 완료'; ok++;
+          break;
+        } catch (err) {
+          if (err.name === 'AbortError') { st.textContent = '중단'; break; }
+          if (err.status === 429 && tries++ < 2) { prog('무료 사용량 제한으로 30초 기다렸다가 이어서 만들어요…'); await new Promise((res) => setTimeout(res, 30000)); continue; }
+          st.textContent = '실패'; st.title = friendlyError(err);
+          break;
+        }
+      }
+    }
+    prefs.lenses_journal = lenses; savePrefs(prefs);
+    batchRun = null; busy = false;
+    const fail = todo.length - ok;
+    prog(`${ok}건을 만들었어요.` + (fail ? ` ${fail}건은 만들지 못했어요. 다시 골라서 만들거나, 기록을 열어 [생성]을 눌러주세요.` : ''));
+    back.querySelector('#bActions').innerHTML = '<button class="btn" id="bDone">닫기</button>';
+    back.querySelector('#bDone').onclick = () => { close(); route(); };
+    back.querySelector('#bDone').focus();
+  };
+  sync();
+  goBtn.focus();
 }
 
 // ---------- 작성 · 수정 화면 ----------
@@ -946,6 +1277,13 @@ const freeField = (type) => manifest.fields[type].find((f) => f.free);
 const modeFields = (type, mode) => manifest.fields[type].filter((f) => (mode === 'sentence' ? f.free : !f.free));
 const FIELD_RENAMES = { '아동의 말': '내담자의 말' };   // 바뀐 칸 이름 → 예전 기록도 새 이름으로 보이게
 const OLD_FREE = { journal: ['회기 메모', '오늘 회기 내용'], analysis: ['사례 메모'] };   // 예전 칸 이름 → 새 이름으로 옮김
+function normInputs(type, inputs) {
+  const inp = { ...(inputs || {}) };
+  const newK = freeField(type)?.label;
+  (OLD_FREE[type] || []).forEach((oldK) => { if (newK && inp[oldK] && !inp[newK]) inp[newK] = inp[oldK]; delete inp[oldK]; });
+  Object.entries(FIELD_RENAMES).forEach(([o, n]) => { if (inp[o] != null && inp[n] == null) inp[n] = inp[o]; delete inp[o]; });
+  return inp;
+}
 function inferMode(src) {
   if (src.mode) return src.mode;
   const inp = src.inputs || {};
@@ -964,13 +1302,7 @@ function openEditor(src) {
     clientId: src.clientId,
     type,
     title: src.title || defaultTitle(src.clientId, type),
-    inputs: (() => {
-      const inp = { ...(src.inputs || {}) };
-      const newK = freeField(type)?.label;
-      (OLD_FREE[type] || []).forEach((oldK) => { if (newK && inp[oldK] && !inp[newK]) inp[newK] = inp[oldK]; delete inp[oldK]; });
-      Object.entries(FIELD_RENAMES).forEach(([o, n]) => { if (inp[o] != null && inp[n] == null) inp[n] = inp[o]; delete inp[o]; });
-      return inp;
-    })(),
+    inputs: normInputs(type, src.inputs),
     mode: null,
     lenses: src.lenses || prefs['lenses_' + type] || manifest.lenses.filter((l) => l[type]).map((l) => l.id),
     useHistory: src.useHistory ?? hasHistory,
@@ -1050,10 +1382,51 @@ function applyAutoTitle(e) {
   const r = splitByRule((e.inputs[freeField('journal').label] || '').trim());
   if (r.sessions.length === 1 && /회기/.test(r.sessions[0].title)) e.title = r.sessions[0].title;
 }
+// 같은 내담자에게 내용 앞부분이 같은 기록이 이미 있는지 (실수로 같은 회기를 두 번 저장하는 것 방지)
+function findSimilar(e) {
+  const key = (inp) => Object.values(inp || {}).filter((v) => typeof v === 'string').join('').replace(/\s+/g, '').slice(0, 60);
+  const mine = key(e.inputs);
+  if (mine.length < 10) return null;
+  return clientRecords(e.clientId).find((r) => r.id !== e.id && r.type === e.type && key(r.inputs) === mine) || null;
+}
+// 새 기록 저장 전 확인 → true: 저장 진행
+function okToSave(e) {
+  if (e.id) return Promise.resolve(true);
+  const d = findSimilar(e);
+  if (!d) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const opener = document.activeElement;
+    const back = document.createElement('div');
+    back.className = 'modal-back';
+    back.innerHTML = `
+      <div class="modal modal-sm" role="alertdialog" aria-modal="true" aria-labelledby="sTitle" aria-describedby="sMsg">
+        <div class="modal-body">
+          <h3 id="sTitle">비슷한 기록이 이미 있어요</h3>
+          <p class="sub" id="sMsg" style="margin:0">"${esc(d.title)}" (${fmtDay(d.createdAt)})과 내용 앞부분이 같아요. 같은 회기를 두 번 저장하는 건 아닌지 확인해 주세요.</p>
+          <p style="margin:12px 0 0"><button class="link-btn" data-view>기존 기록 새 탭에서 보기</button></p>
+        </div>
+        <div class="modal-actions">
+          <button class="btn ghost" data-cancel>저장 안 함</button>
+          <button class="btn" data-ok>그래도 저장</button>
+        </div>
+      </div>`;
+    document.body.appendChild(back);
+    const done = (v) => { document.removeEventListener('keydown', onKey); back.remove(); opener?.focus?.(); resolve(v); };
+    const onKey = (ev) => { if (ev.key === 'Escape') done(false); };
+    document.addEventListener('keydown', onKey);
+    back.querySelector('[data-view]').onclick = () => window.open('#/r/' + d.id, '_blank');   // 새 탭이라 지금 쓰던 내용은 그대로
+    back.querySelector('[data-ok]').onclick = () => done(true);
+    back.querySelector('[data-cancel]').onclick = () => done(false);
+    back.onclick = (ev) => { if (ev.target === back) done(false); };
+    back.querySelector('[data-cancel]').focus();
+  });
+}
+
 // 저장 버튼: 여러 회기면 바로 회기별 미리보기로
-function onSaveClick() {
+async function onSaveClick() {
   const e = editor;
   if (canSplit(e) && sessionCount(e) >= 2) return startSplit(false);
+  if (!(await okToSave(e))) return;
   applyAutoTitle(e);
   saveEditor(false, true).then(() => { if (editor === e && !e.dirty) { e.editing = false; renderEditor(); } }).catch(() => {});
 }
@@ -1208,6 +1581,7 @@ async function openRunModal() {
   if (!profile.geminiKey) { toast('먼저 설정에서 AI 이용 키를 등록해 주세요'); location.hash = '#/settings'; return; }
   if (!buildPrompt().filledCount) return toast('내용을 하나 이상 입력해 주세요');
   if (canSplit(e) && sessionCount(e) >= 2) return startSplit(true);   // 여러 회기면 묻지 않고 회기별 미리보기로(내용 생성 체크된 상태)
+  if (!(await okToSave(e))) return;
   applyAutoTitle(e);
   const prevCount = prevRecords(e.clientId, e.id, e.createdAt).length;
   const memo = (clients.find((c) => c.id === e.clientId)?.memo || '').trim();
