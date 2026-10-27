@@ -409,19 +409,10 @@ function viewClient(id) {
       </div>
     </div>
     <div class="stack">
-      <div class="card">
-        <h3>내담자 메모</h3>
-        <p class="sub">이 내담자에 대해 기억해 둘 내용</p>
-        <textarea id="memo" placeholder="예) 2026년 9월 의뢰, 주 1회, 모 상담 격주" ${viewAs ? 'readonly' : ''}>${esc(c.memo)}</textarea>
-      </div>
+      ${profileCardHTML(c)}
       ${listHTML(list, false)}
     </div>`;
-  $('#memo').onblur = async (e) => {
-    if (e.target.value === c.memo) return;
-    c.memo = e.target.value; c.updatedAt = Date.now();
-    await updateDoc(userDoc('clients', id), { memo: c.memo, updatedAt: c.updatedAt });
-    toast('내담자 메모를 저장했습니다');
-  };
+  bindProfileCard(c);
   $('#moreBtn').onclick = () => toggleMenu($('#moreBtn'));
   const closeMenu = closeMenus;
   $('#renameBtn').onclick = async () => {
@@ -450,6 +441,171 @@ function viewClient(id) {
     });
   };
   bindList();
+}
+
+// ---------- 내담자 정보 (예전 '내담자 메모') ----------
+// 상담사가 계속 기억해야 할 고정 정보. 항목은 일지 서식 17종·수퍼비전폼 공통 항목에서 추린 가안 → 강미 피드백 후 조정.
+// 저장: clients/{id}.profile = { birth, gender, ... }, '기타 기억할 것'은 예전 memo 필드를 그대로 씀(기존 메모 유지).
+const PROFILE = [
+  { group: '기본 정보', fields: [
+    { k: 'birth', label: '생년월일', type: 'date', ph: '예) 20180305' },
+    { k: 'gender', label: '성별', type: 'select', options: ['남', '여'] },
+    { k: 'school', label: '학교·학년', ph: '예) 초2, 미취학, 성인' },
+    { k: 'program', label: '소속 사업·기관', ph: '예) 교육청 지원, 발달재활 바우처' },
+    { k: 'start', label: '상담 시작일', type: 'date', ph: '예) 20260905' },
+    { k: 'schedule', label: '정기 일정', ph: '예) 주 1회 화 16시, 모 상담 격주' },
+  ] },
+  { group: '상담 배경', fields: [
+    { k: 'referral', label: '의뢰 경위', ph: '예) 담임 권유, 수업 중 자리 이탈이 잦음' },
+    { k: 'concern', label: '주호소', multi: true, ph: '예) 친구를 때리는 일이 잦음, 엄마와 떨어지기 힘들어함' },
+    { k: 'history', label: '발달·병력', multi: true, ph: '예) 언어 발달 늦음, ADHD 진단(2025), 약 복용 중' },
+    { k: 'family', label: '가족·양육 환경', multi: true, ph: '예) 부모·동생 1명, 주 양육자 할머니' },
+    { k: 'tests', label: '검사 결과', multi: true, ph: '예) K-WISC-V 전체 IQ 95 (2026.09)' },
+    { k: 'memo', label: '기타 기억할 것', multi: true, ph: '예) 시작 전 화장실 꼭 들르기, 모래 촉감 싫어함' },
+  ] },
+];
+const PF_ALL = PROFILE.flatMap((g) => g.fields);
+const PF = Object.fromEntries(PF_ALL.map((f) => [f.k, f]));
+const pval = (c, k) => ((k === 'memo' ? c?.memo : c?.profile?.[k]) || '').trim();
+function ageOf(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || ''); if (!m) return null;
+  const t = new Date(); let a = t.getFullYear() - +m[1];
+  if (t.getMonth() + 1 < +m[2] || (t.getMonth() + 1 === +m[2] && t.getDate() < +m[3])) a--;
+  return a >= 0 && a < 130 ? a : null;
+}
+const dotDate = (iso) => (iso || '').replace(/-/g, '.');
+const birthText = (iso) => { const a = ageOf(iso); return dotDate(iso) + (a === null ? '' : ` (만 ${a}세)`); };
+// "20180305" / "2018-03-05" / "2018.3.5" → "2018-03-05", 틀리면 null
+function parseDate8(v) {
+  const t = (v || '').trim();
+  const m = /^(\d{4})(\d{2})(\d{2})$/.exec(t) || /^(\d{4})[.\-/\s]+(\d{1,2})[.\-/\s]+(\d{1,2})\.?$/.exec(t);
+  if (!m) return null;
+  const [y, mo, da] = [+m[1], +m[2], +m[3]], dt = new Date(y, mo - 1, da);
+  if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== da || y < 1900) return null;
+  return `${y}-${String(mo).padStart(2, '0')}-${String(da).padStart(2, '0')}`;
+}
+const SUMMARY_KEYS = ['birth', 'gender', 'school', 'program', 'schedule'];
+const fieldText = (c, f) => (f.k === 'birth' ? birthText(pval(c, f.k)) : f.type === 'date' ? dotDate(pval(c, f.k)) : pval(c, f.k));
+const summaryItems = (c) => SUMMARY_KEYS.filter((k) => pval(c, k)).map((k) => fieldText(c, PF[k]));
+const detailFields = (c) => PF_ALL.filter((f) => !SUMMARY_KEYS.includes(f.k) && pval(c, f.k));
+// AI·관리자·내보내기용 텍스트
+function profileText(c) {
+  if (!c) return '';
+  return PF_ALL.filter((f) => pval(c, f.k)).map((f) => `${f.label}: ${fieldText(c, f)}`).join('\n');
+}
+
+function profileCardHTML(c) {
+  const items = summaryItems(c), details = detailFields(c);
+  const open = !!prefs.profileOpen || !items.length;   // 기본 정보가 없으면 상세(예전 메모 등)를 펼쳐서 보여줌
+  if (!items.length && !details.length) return `
+    <div class="card pf-card pf-empty">
+      <div><h3>내담자 정보</h3><p class="sub" style="margin:0">생년월일·의뢰 경위처럼 계속 기억해야 할 정보를 적어두세요. AI 분석에 함께 참고돼요.</p></div>
+      <button class="btn soft h32" id="pfEdit">정보 입력</button>
+    </div>`;
+  return `
+    <div class="card pf-card">
+      <div class="pf-head">
+        <button class="pf-toggle" id="pfToggle" aria-expanded="${open}" aria-controls="pfDetails">
+          <svg class="pf-chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><h3>내담자 정보</h3>
+        </button>
+        <button class="btn ghost h32" id="pfEdit">수정</button>
+      </div>
+      <div class="pf-meta">${items.length ? items.map((t) => `<span>${esc(t)}</span>`).join('<span class="pf-dot" aria-hidden="true">•</span>') : '<span class="pf-none">기본 정보 없음</span>'}</div>
+      <div class="pf-details" id="pfDetails" ${open ? '' : 'hidden'}>
+        ${details.length ? details.map((f) => `<div class="pf-row"><div class="pf-label">${f.label}</div><div class="pf-value">${esc(fieldText(c, f))}</div></div>`).join('') : '<p class="sub" style="margin:0">상담 배경 정보가 아직 없어요.</p>'}
+      </div>
+    </div>`;
+}
+function bindProfileCard(c) {
+  $('#pfToggle')?.addEventListener('click', () => {
+    const next = $('#pfToggle').getAttribute('aria-expanded') !== 'true';
+    prefs.profileOpen = next; savePrefs(prefs);
+    $('#pfToggle').setAttribute('aria-expanded', next); $('#pfDetails').hidden = !next;
+  });
+  $('#pfEdit')?.addEventListener('click', () => openProfileModal(c));
+}
+
+function openProfileModal(c) {
+  const opener = document.activeElement;
+  const fieldHTML = (f) => {
+    const v = pval(c, f.k);
+    const val = f.type === 'date' ? v.replace(/-/g, '') : v;
+    const input = f.type === 'select'
+      ? `<select id="pf_${f.k}" data-k="${f.k}"><option value="">선택 안 함</option>${f.options.map((o) => `<option ${o === v ? 'selected' : ''}>${o}</option>`).join('')}</select>`
+      : f.multi
+        ? `<textarea id="pf_${f.k}" data-k="${f.k}" rows="1" placeholder="${esc(f.ph)}">${esc(val)}</textarea>`
+        : `<input type="text" id="pf_${f.k}" data-k="${f.k}" value="${esc(val)}" placeholder="${esc(f.ph)}" autocomplete="off" ${f.type === 'date' ? 'inputmode="numeric" maxlength="10"' : 'maxlength="60"'}>`;
+    return `<div class="pf-field">
+      <label for="pf_${f.k}">${f.label}${f.type === 'date' ? `<span class="pf-hint" data-hint="${f.k}"></span>` : ''}</label>${input}</div>`;
+  };
+  const back = document.createElement('div');
+  back.className = 'modal-back';
+  back.innerHTML = `
+    <div class="modal pf-modal" role="dialog" aria-modal="true" aria-labelledby="pfTitle">
+      <div class="pf-modal-head">
+        <h3 id="pfTitle">${esc(c.name)} 정보</h3>
+        <button class="pf-close" data-cancel aria-label="닫기"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      </div>
+      <div class="modal-body pf-body">
+        <div class="pf-notice">
+          <b>상담사가 계속 기억해야 할 정보</b>
+          적어둔 정보는 상담일지·사례 분석을 만들 때 AI가 함께 참고해요. 모르는 칸은 비워두세요.
+        </div>
+        ${PROFILE.map((g, i) => `${i ? `<h4 class="pf-group-title">${g.group}</h4>` : ''}<div class="pf-group">${g.fields.map(fieldHTML).join('')}</div>`).join('')}
+      </div>
+      <div class="pf-actions">
+        <p class="field-error" id="pfErr" hidden></p>
+        <button class="btn block pf-save" data-ok disabled>저장하기</button>
+      </div>
+    </div>`;
+  document.body.appendChild(back);
+  const els = [...back.querySelectorAll('[data-k]')];
+  const ok = back.querySelector('[data-ok]'), err = back.querySelector('#pfErr');
+  const snap = () => JSON.stringify(els.map((e) => e.value.trim()));
+  const initial = snap();
+  const dirty = () => snap() !== initial;
+  const grow = (t) => { t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; };
+  const sync = () => {
+    back.querySelectorAll('[data-hint]').forEach((h) => {
+      const v = back.querySelector('#pf_' + h.dataset.hint).value.trim(), d = parseDate8(v);
+      h.textContent = !v ? '' : !d ? ' · 20180305처럼 8자리로 적어주세요' : h.dataset.hint === 'birth' && ageOf(d) !== null ? ` · 만 ${ageOf(d)}세` : '';
+      h.classList.toggle('bad', !!v && !d);
+    });
+    ok.disabled = !dirty();
+  };
+  const done = () => { document.removeEventListener('keydown', onKey); back.remove(); opener?.focus?.(); };
+  const tryClose = async () => {
+    if (dirty() && !(await confirmModal({ title: '저장하지 않고 닫을까요?', message: '입력한 내용이 사라집니다.', okLabel: '닫기', cancelLabel: '계속 입력' }))) return;
+    done();
+  };
+  const onKey = (ev) => { if (ev.key === 'Escape' && !document.querySelector('[role=alertdialog]')) tryClose(); };
+  document.addEventListener('keydown', onKey);
+  els.forEach((e) => { e.addEventListener('input', () => { if (e.tagName === 'TEXTAREA') grow(e); sync(); }); e.addEventListener('change', sync); });
+  back.querySelectorAll('textarea').forEach(grow);
+  back.querySelector('[data-cancel]').onclick = tryClose;
+  back.onclick = (ev) => { if (ev.target === back) tryClose(); };
+  ok.onclick = async () => {
+    const out = {}, bad = [];
+    els.forEach((e) => {
+      const f = PF[e.dataset.k], v = e.value.trim();
+      if (f.type === 'date' && v) { const d = parseDate8(v); if (!d) bad.push(f.label); out[f.k] = d || ''; } else out[f.k] = v;
+    });
+    if (bad.length) { err.textContent = `${bad.join(', ')}: 날짜를 20180305처럼 8자리 숫자로 적어주세요.`; err.hidden = false; return; }
+    const { memo, ...profile } = out;
+    ok.disabled = true; ok.textContent = '저장 중…'; err.hidden = true;
+    try {
+      const now = Date.now();
+      await updateDoc(userDoc('clients', c.id), { profile, memo, updatedAt: now });
+      Object.assign(c, { profile, memo, updatedAt: now });
+      done(); toast('내담자 정보를 저장했어요');
+      if (location.hash === '#/c/' + c.id) viewClient(c.id);
+    } catch {
+      err.textContent = '저장하지 못했어요. 인터넷 연결을 확인해 주세요.'; err.hidden = false;
+      ok.textContent = '저장하기'; ok.disabled = false;
+    }
+  };
+  sync();
+  back.querySelector('#pf_birth')?.focus();
 }
 
 function viewHome() {
@@ -933,7 +1089,7 @@ async function viewAdmin(uid) {
       ${data.clients.map((c) => `
         <div class="card admin-client">
           <h3>${esc(c.name)} <span class="sub" style="margin:0">기록 ${byClient(c.id).length}건</span></h3>
-          ${c.memo ? `<p class="sub">내담자 메모: ${esc(c.memo)}</p>` : ''}
+          ${profileText(c) ? `<p class="sub" style="white-space:pre-wrap">${esc(profileText(c))}</p>` : ''}
           ${byClient(c.id).map(recHTML).join('') || '<p class="sub">기록 없음</p>'}
         </div>`).join('') || '<div class="card empty"><b>아직 내담자가 없습니다</b></div>'}`;
     $('#adminRefresh').onclick = () => { delete adminCache[uid]; viewAdmin(uid); };
@@ -1080,7 +1236,7 @@ function exportRecords(kind) {
     const line = '='.repeat(40);
     body = `농지니 기록 · ${nowStamp()} 내보냄\n내담자 ${clients.length}명 · 기록 ${records.length}건\n`;
     clients.forEach((c) => {
-      body += `\n${line}\n[내담자] ${c.name}\n${c.memo ? '내담자 메모: ' + c.memo + '\n' : ''}${line}\n`;
+      body += `\n${line}\n[내담자] ${c.name}\n${profileText(c) ? profileText(c) + '\n' : ''}${line}\n`;
       clientRecords(c.id).slice().sort((a, b) => a.createdAt - b.createdAt).forEach((r) => {
         body += `\n▶ [${TYPE[r.type]}] ${r.title} (${recDate(r)})\n\n■ 입력 내용\n`;
         Object.entries(r.inputs || {}).filter(([, v]) => (v || '').trim()).forEach(([k, v]) => { body += `- ${k}: ${v.trim()}\n`; });
@@ -1330,7 +1486,7 @@ function openBatchRun(list) {
         <label class="check modal-hist">
           <input type="checkbox" id="bHistory" checked>
           <span>이전 기록 참고하기
-            <small>기록마다 그보다 앞선 기록 최대 ${HISTORY_COUNT}건을 함께 보냅니다. 내담자 메모는 항상 함께 참고합니다.</small>
+            <small>기록마다 그보다 앞선 기록 최대 ${HISTORY_COUNT}건을 함께 보냅니다. 내담자 정보는 항상 함께 참고합니다.</small>
           </span>
         </label>
         ${had ? `<label class="check modal-hist">
@@ -1744,7 +1900,7 @@ async function openRunModal() {
   if (!(await okToSave(e))) return;
   applyAutoTitle(e);
   const prevCount = prevRecords(e.clientId, e.id, e.createdAt).length;
-  const memo = (clients.find((c) => c.id === e.clientId)?.memo || '').trim();
+  const memo = profileText(clients.find((c) => c.id === e.clientId));
   const opener = document.activeElement;
   const back = document.createElement('div');
   back.className = 'modal-back';
@@ -1765,7 +1921,7 @@ async function openRunModal() {
             <small>${prevCount ? `최근 기록 ${Math.min(prevCount, HISTORY_COUNT)}건을 함께 보내 변화와 반복되는 주제를 반영합니다` : '아직 참고할 이전 기록이 없습니다'}</small>
           </span>
         </label>
-        ${memo ? '<p class="modal-note">내담자 메모(나이·의뢰 사유 등)도 함께 참고합니다.</p>' : ''}
+        ${memo ? '<p class="modal-note">내담자 정보(나이·의뢰 경위 등)도 함께 참고합니다.</p>' : ''}
         ${e.result ? '<p class="modal-note">지금 결과는 새 결과로 바뀝니다.</p>' : ''}
       </div>
       <div class="modal-actions">
@@ -1904,9 +2060,9 @@ function buildPrompt(e = editor) {
     }
   }
 
-  const memo = (clients.find((c) => c.id === e.clientId)?.memo || '').trim();
+  const memo = profileText(clients.find((c) => c.id === e.clientId));
   out += sep + `# [입력 정보]\n\n내담자: ${clientName(e.clientId)}\n기록: ${e.title}\n\n`
-    + (memo ? `## 내담자 기본 정보 (상담자 메모)\n나이·의뢰 사유·발달력 등 고정 정보입니다. 판단할 때 반드시 반영하십시오.\n${memo}\n\n` : '') + filled.map(([k, v]) => `## ${k}\n${v}`).join('\n\n');
+    + (memo ? `## 내담자 기본 정보 (상담자가 입력)\n나이·의뢰 경위·발달력 등 고정 정보입니다. 판단할 때 반드시 반영하고, 특히 연령 기대 수준은 만 나이를 기준으로 판단하십시오.\n${memo}\n\n` : '') + filled.map(([k, v]) => `## ${k}\n${v}`).join('\n\n');
   out += sep + `${lenses.length ? '[참고자료]의 이론을 순서대로 빠짐없이 적용해 ' : ''}[출력 양식]에 맞춰 ${task}을 해주십시오. 답변은 한국어 마크다운으로 작성하십시오.`;
   return { system: docs[manifest.role.id], user: out, filledCount: filled.length };
 }
