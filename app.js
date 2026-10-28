@@ -1943,7 +1943,7 @@ function renderReadView() {
       </div>
       <div class="row head-actions">
         <button class="btn danger small" id="delBtn">삭제</button>
-        <button class="btn h32" id="editBtn">수정</button>
+        <button class="btn ghost h32" id="editBtn">수정</button>
         <button class="btn h32" id="runBtn">${e.result ? SHORT[e.type] + ' 다시 생성' : '+ ' + TYPE[e.type] + ' 생성'}</button>
       </div>
     </div>
@@ -1964,7 +1964,7 @@ function renderReadView() {
     <div class="card ${e.result ? '' : 'hidden'}" id="outCard" style="margin-top:18px">
       <div class="out-head">
         <h3>${TYPE[e.type]}</h3>
-        <div class="row"><button class="btn small" id="copyBtn">복사</button></div>
+        <div class="row"><button class="btn ghost small" id="copyBtn">복사</button></div>
       </div>
       <div class="status" id="status"></div>
       <div class="result" id="result"></div>
@@ -2018,7 +2018,7 @@ function renderEditForm() {
       <div class="out-head">
         <h3>${TYPE[e.type]} 결과</h3>
         <div class="row">
-          <button class="btn small" id="copyBtn">복사</button>
+          <button class="btn ghost small" id="copyBtn">복사</button>
           <button class="btn ghost small" id="editResultBtn">${e.editingResult ? '수정 완료' : '직접 수정'}</button>
         </div>
       </div>
