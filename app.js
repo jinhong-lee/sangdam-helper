@@ -1515,6 +1515,65 @@ async function purgeItems(rows) {
 }
 
 let trashSel = new Set(), trashFilter = '';
+// 휴지통 항목 미리보기: 지운 기록·내담자 내용을 읽기 전용으로 보여주고, 여기서 바로 복구·영구 삭제
+function openTrashPreview(x, left, { onRestore, onPurge }) {
+  const opener = document.activeElement;
+  const isC = x.kind === 'client', it = x.item;
+  const X = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+  let title, meta, note = '', body;
+  if (isC) {
+    const recs = codeleted(it).slice().sort((a, b) => chronoOf(a) - chronoOf(b));
+    const rows = PF_ALL.filter((f) => pval(it, f.k));
+    title = it.name;
+    meta = `내담자 · ${fmtDay(x.deletedAt)} 삭제`;
+    if (recs.length) note = `복구하면 함께 삭제된 기록 ${recs.length}건도 돌아와요.`;
+    body = `
+      <h4 class="tp-h">내담자 정보</h4>
+      ${rows.length ? rows.map((f) => `<div class="read-field"><div class="read-label">${f.label}</div><div class="read-value">${esc(fieldText(it, f))}</div></div>`).join('') : '<p class="sub" style="margin:0">적어둔 정보가 없어요.</p>'}
+      <h4 class="tp-h">함께 삭제된 기록 ${recs.length}건</h4>
+      ${recs.length ? `<ul class="tp-list">${recs.map((r) => `<li><b>${SHORT_TYPE[r.type]}</b>${esc(r.title || '')}</li>`).join('')}</ul>` : '<p class="sub" style="margin:0">없어요.</p>'}`;
+  } else {
+    const inputs = Object.entries(it.inputs || {}).filter(([, v]) => (v || '').trim());
+    const cDel = trashClients.some((c) => c.id === x.clientId);
+    title = it.title || '(제목 없음)';
+    meta = `${esc(anyClientName(x.clientId))} · ${SHORT_TYPE[it.type]} · ${sessionOf(it) ? '상담 ' + fmtDay(sessionOf(it)) : '작성 ' + fmtDay(writtenOf(it))} · ${fmtDay(x.deletedAt)} 삭제`;
+    if (cDel) note = `복구하면 삭제된 내담자 '${anyClientName(x.clientId)}'도 함께 돌아와요.`;
+    body = `
+      <h4 class="tp-h">입력한 내용</h4>
+      ${inputs.length ? inputs.map(([k, v]) => `<div class="read-field">${it.mode === 'sentence' ? '' : `<div class="read-label">${esc(k)}</div>`}<div class="read-value">${esc(v)}</div></div>`).join('') : '<p class="sub" style="margin:0">없어요.</p>'}
+      <h4 class="tp-h">${it.type === 'analysis' ? '사례 분석' : '상담일지'}</h4>
+      ${it.result ? `<div class="result">${DOMPurify.sanitize(marked.parse(it.result))}</div>` : '<p class="sub" style="margin:0">만든 결과가 없어요.</p>'}`;
+  }
+  const back = document.createElement('div');
+  back.className = 'modal-back';
+  back.innerHTML = `
+    <div class="modal tp-modal" role="dialog" aria-modal="true" aria-labelledby="tpTitle">
+      <div class="pf-modal-head tp-head">
+        <div class="tp-title">
+          <span class="it-state left">${left}일 남음</span>
+          <h3 id="tpTitle">${esc(title)}</h3>
+          <p class="read-meta" style="margin:4px 0 0">${isC ? esc(meta) : meta}</p>
+        </div>
+        <button class="pf-close" data-cancel aria-label="닫기">${X}</button>
+      </div>
+      <div class="modal-body tp-body">${body}</div>
+      <div class="modal-actions tp-actions">
+        ${note ? `<p class="tp-note">${esc(note)}</p>` : ''}
+        <button class="btn danger" data-purge>영구 삭제</button>
+        <button class="btn" data-restore>복구</button>
+      </div>
+    </div>`;
+  document.body.appendChild(back);
+  const close = () => { document.removeEventListener('keydown', onKey); back.remove(); opener?.focus?.(); };
+  const onKey = (ev) => { if (ev.key === 'Escape' && !document.querySelector('[role=alertdialog]')) close(); };
+  document.addEventListener('keydown', onKey);
+  back.querySelector('[data-cancel]').onclick = close;
+  back.onclick = (ev) => { if (ev.target === back) close(); };
+  back.querySelector('[data-restore]').onclick = () => { close(); onRestore(); };
+  back.querySelector('[data-purge]').onclick = () => { close(); onPurge(); };
+  back.querySelector('[data-restore]').focus();
+}
+
 function viewTrash() {
   const all = trashRows();
   if (trashFilter && !all.some((x) => x.clientId === trashFilter)) trashFilter = '';
@@ -1526,7 +1585,6 @@ function viewTrash() {
   view.main = `
     <div class="page-head" style="align-items:center">
       <h2>휴지통</h2>
-      ${all.length ? '<div class="row"><button class="btn ghost" id="tRestoreAll">모두 복구</button><button class="btn danger" id="tEmpty">휴지통 비우기</button></div>' : ''}
     </div>
     <p class="sub">${TRASH_DAYS}일이 지나면 자동으로 영구 삭제돼요.</p>
     ${all.length ? `
@@ -1583,9 +1641,13 @@ function viewTrash() {
     catch { toast('삭제하지 못했어요. 인터넷 연결을 확인해 주세요.'); }
   };
   const toggle = (k) => { trashSel.has(k) ? trashSel.delete(k) : trashSel.add(k); viewTrash(); $(`[data-tpick="${k}"]`)?.focus(); };
-  // 카드를 누르면 고르기 (휴지통 항목은 열어볼 화면이 없음)
+  // 카드를 누르면 내용 미리보기 (목록과 같게: 왼쪽 아이콘은 고르기, 카드는 열기)
   $('#main').querySelectorAll('[data-tkey]').forEach((el) => {
-    el.onclick = (e) => { if (e.target.closest('.thumb, .more, button')) return; toggle(el.dataset.tkey); };
+    el.onclick = (e) => {
+      if (e.target.closest('.thumb, .more, button')) return;
+      const x = byKey(el.dataset.tkey); if (!x) return;
+      openTrashPreview(x, left(x), { onRestore: () => restore([x]), onPurge: () => purge([x], '영구 삭제') });
+    };
   });
   $('#main').querySelectorAll('[data-tpick]').forEach((b) => { b.onclick = () => toggle(b.dataset.tpick); });
   $('#main').querySelectorAll('.trash-item [data-more]').forEach((b) => { b.onclick = () => toggleMenu(b); });
@@ -1597,8 +1659,6 @@ function viewTrash() {
   on('#tFilter', 'change', (e) => { trashFilter = e.target.value; trashSel.clear(); viewTrash(); $('#tFilter')?.focus(); });
   on('#tRestore', 'click', () => restore(rows.filter((x) => trashSel.has(trashKey(x)))));
   on('#tPurge', 'click', () => purge(rows.filter((x) => trashSel.has(trashKey(x))), '영구 삭제'));
-  on('#tRestoreAll', 'click', () => restore(all));
-  on('#tEmpty', 'click', () => purge(all, '휴지통 비우기'));
 }
 
 // ---------- 고른 기록 결과 한꺼번에 만들기 ----------
