@@ -307,7 +307,7 @@
   /* 기록 목록 */
   .list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
   .list > * { min-width: 0; }
-  .item { display: flex; gap: 12px; align-items: flex-start; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 16px; cursor: pointer; }
+  .item { display: flex; gap: 12px; align-items: flex-start; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; cursor: pointer; }
   .item:hover { border-color: var(--primary); }
   .item-body { flex: 1; min-width: 0; }
   .item-title { font-weight: 700; font-size: 15px; line-height: 22px; letter-spacing: 0px; overflow-wrap: anywhere; }
@@ -332,7 +332,7 @@
   .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .sort-select { height: 32px; padding: 0 32px 0 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236B665E' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 8px center; font: inherit; font-size: 13px; line-height: 18px; letter-spacing: 0px; color: var(--text); appearance: none; -webkit-appearance: none; cursor: pointer; }
   /* 기록 카드: 썸네일 · 제목 + 날짜 + 상태 · 한 줄 미리보기 */
-  .list .item { align-items: center; padding: 12px 12px 12px 16px; }
+  .list .item { align-items: center; padding: 20px; }
   .thumb { position: relative; flex-shrink: 0; width: 44px; height: 44px; padding: 0; border: 1px solid var(--border); border-radius: 12px; display: grid; place-items: center; cursor: pointer; transition: background .15s, border-color .15s, color .15s; }
   .thumb.journal { background: var(--primary-soft); color: var(--primary); }
   .thumb.analysis { background: var(--accent-soft); color: var(--accent); }
