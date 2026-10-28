@@ -374,11 +374,12 @@
   .pf-modal { max-width: 520px; max-height: 70vh; border-radius: 20px; }
   .pf-modal-head { display: flex; justify-content: space-between; align-items: center; padding: 22px 18px 6px 26px; }
   .pf-modal-head h3 { font-size: 18px; line-height: 1.4; margin: 0; letter-spacing: -0.01em; }
-  /* 모달 닫기(×): 연한 회색 원 + 흰 × */
-  .pf-close { width: 28px; height: 28px; flex-shrink: 0; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: var(--close-bg); color: var(--close-fg); cursor: pointer; transition: background .15s; }
+  /* 모달 닫기(×): 연한 회색 원(20px) + 흰 × */
+  .pf-close { position: relative; width: 20px; height: 20px; flex-shrink: 0; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: var(--close-bg); color: var(--close-fg); cursor: pointer; transition: background .15s; }
   .pf-close:hover { background: var(--close-bg-hover); }
   .pf-close:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-  .pf-close svg { width: 14px; height: 14px; stroke-width: 3; }
+  .pf-close svg { width: 10px; height: 10px; stroke-width: 3.4; }
+  .pf-close::after { content: ""; position: absolute; inset: -8px; }   /* 보이는 원은 20px, 누르는 영역은 36px */
   .pf-body { padding: 10px 26px 8px; }
   .pf-notice { background: var(--primary-soft); border-radius: 12px; padding: 14px 16px; font-size: 13px; color: var(--text-2); line-height: 1.55; margin-bottom: 18px; }
   .pf-notice b { display: block; color: var(--primary); font-size: 14px; margin-bottom: 2px; }
