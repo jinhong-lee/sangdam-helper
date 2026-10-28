@@ -737,10 +737,11 @@ function listInner() {
   <div class="list-bar${n ? ' active' : ''}">
     <label class="bar-check">
       <input type="checkbox" id="selAll" ${all ? 'checked' : ''} data-mixed="${n && !all ? 1 : 0}" aria-label="${all ? '전체 해제' : '전체 선택'}">
-      <span>${n ? `<b>${n}</b>건 선택됨` : `기록 ${list.length}건`}</span>
+      <span>총 ${list.length}건</span>
     </label>
     ${!n ? `<label class="sort-wrap"><span class="sr-only">정렬</span><select id="listSort" class="sort-select">${Object.entries(SORTS).map(([k, t]) => `<option value="${k}" ${(prefs.listSort || 'recent') === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>` : ''}
     ${n ? `<div class="row bar-actions">
+      <span class="bar-count" aria-live="polite"><b>${n}</b>건 선택</span>
       <button class="btn h32" id="selGen">결과 만들기</button>
       <button class="btn danger h32" id="selDel">삭제</button>
       <button class="btn ghost h32" id="selCancel">취소</button>
@@ -1508,9 +1509,10 @@ function viewTrash() {
     <div class="list-bar${n ? ' active' : ''}">
       <label class="bar-check">
         <input type="checkbox" id="tAll" ${n && n === rows.length ? 'checked' : ''} data-mixed="${n && n < rows.length ? 1 : 0}" aria-label="${n && n === rows.length ? '전체 해제' : '전체 선택'}">
-        <span>${n ? `<b>${n}</b>건 선택됨` : `${rows.length}건`}</span>
+        <span>총 ${rows.length}건</span>
       </label>
       ${n ? `<div class="row bar-actions">
+        <span class="bar-count" aria-live="polite"><b>${n}</b>건 선택</span>
         <button class="btn h32" id="tRestore">복구</button>
         <button class="btn danger h32" id="tPurge">영구 삭제</button>
         <button class="btn ghost h32" id="tCancel">취소</button>
