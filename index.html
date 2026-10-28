@@ -86,12 +86,20 @@
   .logo { display: inline-flex; align-items: center; gap: 8px; font-weight: 800; font-size: 18px; letter-spacing: -0.02em; color: var(--text); text-decoration: none; margin-right: auto; }
   .logo img { border-radius: 7px; flex-shrink: 0; }
   .login-logo { display: block; margin: 0 auto 12px; border-radius: 13px; }
-  .user-mail { font-size: 13px; color: var(--text-2); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  @media (max-width: 600px) { .user-mail { display: none; } }
+  .user-mail { font-size: 13px; font-weight: 500; color: var(--text); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .logo { white-space: nowrap; flex-shrink: 0; }
+  .acct-chev { color: var(--text-2); flex-shrink: 0; }
+  .acct-menu { min-width: 160px; }
+  .more-menu a { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; font-size: 14px; color: var(--text); text-decoration: none; }
+  .more-menu a:hover, .more-menu a:focus-visible { background: var(--surface-2); outline: none; }
+  .acct-menu button { display: flex; align-items: center; gap: 8px; }
+  /* 좁은 화면: 이메일·'농지에게' 문구를 숨기고 아이콘 위주로 → 로고가 깨지지 않게 */
+  @media (max-width: 600px) { .user-mail, .acct-chev { display: none; } .topbar-in { padding: 10px 16px; gap: 8px; } }
+  @media (max-width: 420px) { #fbBtn .fb-short { display: none; } #fbBtn, .acct-btn { padding: 7px 9px; } }
 
   /* 레이아웃 */
   .layout { --side-w: 264px; display: grid; grid-template-columns: var(--side-w) 1fr; align-items: start; min-height: calc(100vh - 56px); }
-  @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+  @media (max-width: 860px) { .layout { grid-template-columns: 1fr; align-content: start; } }   /* 남는 높이를 줄 사이에 나눠 빈 틈이 생기지 않게 */
   /* 왼쪽 메뉴 폭 조절 손잡이: 끌기, 키보드 ←→, 두 번 클릭하면 기본 폭 */
   .side-resizer { position: fixed; top: 56px; bottom: 0; left: calc(var(--side-w) - 4px); width: 8px; z-index: 15; cursor: col-resize; touch-action: none; }
   .side-resizer::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; background: transparent; transition: background .15s; }
@@ -133,12 +141,18 @@
   .nav a.kid.on { color: var(--primary); }
   .nav .kt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .kid-empty { font-size: 12px; color: var(--text-2); padding: 6px 8px; }
+  /* 모바일: 메뉴를 '내담자 ▾' 하나로 접어 본문이 바로 보이게 */
+  .nav-toggle { display: none; }
   @media (max-width: 860px) {
-    .nav { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
-    .nav a { white-space: nowrap; background: var(--surface); border: 1px solid var(--border); }
-    .nav-gap, .side-title { display: none; }
-    .tree, .tree-row { display: contents; }
-    .tw, .tree-kids { display: none; }
+    .nav-toggle { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); font: inherit; font-size: 14px; color: var(--text); cursor: pointer; }
+    .nav-toggle .nt-label { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .nav-toggle .nt-label span:first-child { font-size: 12px; color: var(--text-2); flex-shrink: 0; }
+    .nav-toggle b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .nav-toggle svg { flex-shrink: 0; color: var(--text-2); transition: transform .15s; }
+    .nav-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+    .side-body { margin-top: 10px; }
+    .sidebar:not(.open) .side-body { display: none; }
+    .sidebar { padding: 12px 16px !important; }
   }
 
   /* 공통 요소 */
@@ -188,11 +202,12 @@
   body.viewas .topbar { border-bottom: 2px solid var(--accent); }
   /* 사용자 화면 보기: 쓰기 동작 전부 숨김 */
   body.viewas #navAddClient, body.viewas #firstClient, body.viewas #emptyAddClient,
-  body.viewas #moreBtn, body.viewas .item .more, body.viewas .page-head .btn.soft,
+  body.viewas #moreBtn, body.viewas .item .more, body.viewas .page-head .btn.soft, body.viewas .new-rec,
   body.viewas #delBtn, body.viewas #editBtn, body.viewas #runBtn, body.viewas #saveBtn, body.viewas #cancelBtn { display: none !important; }
   body.viewas #pfEdit { display: none !important; }
   body.viewas .nav-trash, body.viewas #fbBtn, body.viewas .bar-check input { display: none !important; }
   body.viewas .thumb { pointer-events: none; }
+  body.viewas .onboard { display: none; }
   .read-meta { font-size: 13px; color: var(--text-2); margin: 0 0 16px; }
   .read-title { font-size: 24px; line-height: 1.3; margin: 0 0 4px; letter-spacing: -0.02em; overflow-wrap: anywhere; }
   .read-field + .read-field { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
@@ -284,6 +299,8 @@
   .bar-check input { width: 18px; height: 18px; margin: 0; accent-color: var(--primary); cursor: pointer; }
   .list-bar.active .bar-check { color: var(--text); }
   .bar-actions { gap: 6px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .sort-select { height: 32px; padding: 0 30px 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236B665E' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 8px center; font: inherit; font-size: 13px; color: var(--text); appearance: none; -webkit-appearance: none; cursor: pointer; }
   /* 기록 카드: 썸네일 · 제목 + 날짜 + 상태 · 한 줄 미리보기 */
   .list .item { align-items: center; padding: 12px 12px 12px 16px; }
   .thumb { position: relative; flex-shrink: 0; width: 44px; height: 44px; padding: 0; border: 1px solid var(--border); border-radius: 12px; display: grid; place-items: center; cursor: pointer; transition: background .15s, border-color .15s, color .15s; }
@@ -361,7 +378,7 @@
   .pf-save { height: 52px; font-size: 16px; border-radius: 12px; }
   .pf-save:disabled { background: var(--surface-2); color: var(--text-2); opacity: 1; }
   /* 의견 보내기 · 관리자 의견함 */
-  @media (max-width: 420px) { .fb-long { display: none; } }   /* 아주 좁은 화면에선 '의견 보내기'만 */
+  @media (max-width: 600px) { .fb-long { display: none; } }   /* 좁은 화면에선 '의견 보내기'만, 420px 이하는 아이콘만 */
   .fb-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
   .fb-chip { height: 30px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); font: inherit; font-size: 13px; color: var(--text-2); cursor: pointer; }
   .fb-chip:hover { color: var(--text); }
@@ -436,6 +453,25 @@
   .steps li { counter-increment: s; display: flex; gap: 10px; align-items: flex-start; font-size: 14px; }
   .steps li::before { content: counter(s); flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; background: var(--primary-soft); color: var(--primary); font-weight: 700; font-size: 12px; display: grid; place-items: center; margin-top: 1px; }
   .key-state { font-size: 13px; margin-top: 8px; }
+  .key-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); }
+  .key-ok { font-size: 13px; font-weight: 600; color: var(--primary); }
+  .key-mask { font-size: 14px; color: var(--text-2); letter-spacing: .04em; }
+  /* 처음 시작하기 안내 */
+  .onboard { margin-bottom: 16px; }
+  .onboard h3 { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .ob-count { font-size: 12px; font-weight: 600; color: var(--primary); background: var(--primary-soft); padding: 1px 8px; border-radius: 999px; }
+  .ob-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .ob-steps li { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; }
+  .ob-steps li.now { border-color: var(--primary); background: var(--primary-soft); }
+  .ob-steps li.done { color: var(--text-2); }
+  .ob-num { width: 24px; height: 24px; flex-shrink: 0; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; background: var(--surface-2); color: var(--text-2); }
+  .ob-steps li.now .ob-num { background: var(--primary); color: var(--on-primary); }
+  .ob-steps li.done .ob-num { background: var(--primary-soft); color: var(--primary); }
+  .ob-text { flex: 1; min-width: 0; display: grid; gap: 2px; font-size: 14px; }
+  .ob-text b { font-weight: 600; }
+  .ob-steps li.done .ob-text b { font-weight: 400; text-decoration: line-through; }
+  .ob-text span { font-size: 13px; color: var(--text-2); }
+  @media (max-width: 560px) { .ob-steps li { flex-wrap: wrap; } .ob-steps li .btn { margin-left: 36px; } }
   .key-state.ok { color: var(--primary); }
   .key-state.bad { color: var(--error); }
 
@@ -510,22 +546,31 @@
     <div class="topbar-in">
       <a class="logo" href="#/"><img src="favicon.svg" alt="" width="28" height="28">농지니</a>
       <span class="viewas-badge" id="viewasBadge" hidden>👀 <b id="viewasName"></b> 화면 보는 중 · 읽기 전용 <button class="btn h32" id="viewasExit">나가기</button></span>
-      <span class="user-mail" id="userMail"></span>
-      <button class="btn ghost small" id="fbBtn"><svg class="hd-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-5A8 8 0 1 1 21 12z"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01"/></svg><span class="fb-long">농지에게 </span>의견 보내기</button>
+      <button class="btn ghost small" id="fbBtn" aria-label="농지에게 의견 보내기"><svg class="hd-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-5A8 8 0 1 1 21 12z"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01"/></svg><span class="fb-long">농지에게 </span><span class="fb-short">의견 보내기</span></button>
       <a class="btn ghost small" href="#/admin" id="adminLink" hidden>관리자<span class="fb-badge" id="fbBadge" hidden></span></a>
-      <a class="btn ghost small" href="#/settings"><svg class="hd-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>설정</a>
-      <button class="btn ghost small" id="logoutBtn"><svg class="hd-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>로그아웃</button>
+      <div class="more acct">
+        <button class="btn ghost small acct-btn" id="acctBtn" aria-haspopup="menu" aria-expanded="false" aria-label="계정 메뉴">
+          <svg class="hd-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg><span class="user-mail" id="userMail"></span><svg class="acct-chev" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div class="more-menu right acct-menu" role="menu" hidden>
+          <a role="menuitem" href="#/settings" id="acctSettings"><svg class="hd-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>설정</a>
+          <button role="menuitem" id="logoutBtn"><svg class="hd-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>로그아웃</button>
+        </div>
+      </div>
     </div>
   </header>
   <div class="layout">
     <div class="side-resizer" id="sideResizer" role="separator" aria-orientation="vertical" aria-label="메뉴 폭 조절" tabindex="0" title="끌어서 메뉴 폭 조절 · 두 번 클릭하면 기본 폭"></div>
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
+      <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="sideBody"><span class="nt-label"><span>내담자</span><b id="navToggleName">전체 기록</b></span><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+      <div class="side-body" id="sideBody">
       <div class="nav-search">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>
         <input type="search" id="navSearch" placeholder="내담자 이름·기록 제목 검색" aria-label="내담자 이름이나 기록 제목 검색" autocomplete="off">
       </div>
       <button class="nav-add" id="navAddClient">+ 내담자 추가</button>
       <nav class="nav" id="nav"></nav>
+      </div>
     </aside>
     <main id="main"></main>
   </div>

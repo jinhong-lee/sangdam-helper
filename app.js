@@ -257,8 +257,15 @@ function route() {
   else if (page === 'admin' && isAdminUser()) viewAdmin(a);
   else viewHome();
   renderNav();
+  setNavOpen(false);   // 모바일: 이동하면 메뉴 접기
   window.scrollTo(0, 0);
 }
+function setNavOpen(open) {
+  $('#sidebar').classList.toggle('open', open);
+  $('#navToggle').setAttribute('aria-expanded', open);
+}
+$('#navToggle').onclick = () => setNavOpen(!$('#sidebar').classList.contains('open'));
+$('#nav').addEventListener('click', (ev) => { if (ev.target.closest('a')) setNavOpen(false); });   // 같은 화면을 눌러도 접힘
 
 const navToggled = new Map(); // 내담자별로 사용자가 직접 펼침/접음을 바꾼 상태
 let navQuery = '';
@@ -282,6 +289,10 @@ function renderNav() {
     if (q && !nameHit) recs = recs.filter((r) => (r.title || '').toLowerCase().includes(q));
     return { c, recs, show: nameHit || recs.length, total: clientRecords(c.id).length };
   }).filter((g) => g.show);
+  { const [, pg, id] = (location.hash || '#/').split('/');
+    const rec = pg === 'r' && records.find((r) => r.id === id);
+    const cid = pg === 'c' || pg === 'new' ? id : rec?.clientId;
+    $('#navToggleName').textContent = cid ? clientName(cid) : pg === 'trash' ? '쓰레기통' : pg === 'settings' ? '설정' : '전체 기록'; }
   view.nav = `
     ${groups.map(({ c, recs, total }) => {
       const open = q ? true : navToggled.has(c.id) ? navToggled.get(c.id) : c.id === curClient;
@@ -435,7 +446,7 @@ function viewClient(id) {
         </div>
       </div>
       <div class="row">
-        <a class="btn soft h32" href="#/new/${id}/journal">+ 상담일지</a>
+        <a class="btn h32 new-rec" href="#/new/${id}/journal">+ 상담일지</a>
         <a class="btn soft h32" href="#/new/${id}/analysis">+ 사례 분석</a>
       </div>
     </div>
@@ -644,28 +655,38 @@ function openProfileModal(c) {
   back.querySelector('#pf_birth')?.focus();
 }
 
+// 처음 쓰는 사람용 3단계 안내: 하나라도 안 끝났으면 홈 위에 보임
+function onboardHTML() {
+  if (viewAs) return clients.length ? '' : '<div class="card empty"><b>아직 내담자가 없습니다</b></div>';
+  const steps = [
+    { done: !!profile.geminiKey, t: 'AI 이용 키 등록', d: '결과를 만들 때 필요해요. 무료이고 처음 한 번만 하면 돼요.', act: '<a class="btn h32" href="#/settings">키 등록하기</a>' },
+    { done: clients.length > 0, t: '내담자 추가', d: '이름 대신 "A-1"처럼 나만 알아볼 수 있는 별칭을 쓰세요.', act: '<button class="btn h32" id="obClient">내담자 추가</button>' },
+    { done: records.length > 0, t: '첫 상담일지 쓰기', d: '회기 내용을 적으면 AI가 상담일지 초안을 만들어 줘요.', act: clients.length ? `<a class="btn h32" href="#/new/${clients[0].id}/journal">상담일지 쓰기</a>` : '' },
+  ];
+  if (steps.every((x) => x.done)) return '';
+  const next = steps.findIndex((x) => !x.done);
+  return `<div class="card onboard">
+    <h3>농지니 시작하기 <span class="ob-count">${steps.filter((x) => x.done).length}/3</span></h3>
+    <ol class="ob-steps">${steps.map((x, i) => `
+      <li class="${x.done ? 'done' : i === next ? 'now' : ''}">
+        <span class="ob-num" aria-hidden="true">${x.done ? '✓' : i + 1}</span>
+        <div class="ob-text"><b>${x.t}</b>${i === next ? `<span>${x.d}</span>` : ''}</div>
+        ${i === next ? x.act : ''}
+      </li>`).join('')}</ol>
+  </div>`;
+}
 function viewHome() {
   if (!clients.length) {
-    view.main = `
-      <div class="card empty">
-        <b>첫 내담자를 추가해 주세요</b>
-        내담자별로 상담일지와 사례 분석을 모아서 관리합니다.<br>이름 대신 "A-1"처럼 나만 알아볼 수 있는 별칭을 쓰세요.
-        <div style="margin-top:18px"><button class="btn" id="firstClient">+ 내담자 추가</button></div>
-        ${profile.geminiKey ? '' : '<p class="sub" style="margin:18px 0 0">AI 이용 키도 등록해야 합니다. <a href="#/settings">설정으로 가기</a></p>'}
-      </div>`;
-    $('#firstClient').onclick = addClient;
+    view.main = `<div class="page-head"><h2>전체 기록</h2></div>${onboardHTML()}`;
+    on('#obClient', 'click', addClient);
     return;
   }
   view.main = `
     <div class="page-head"><h2>전체 기록</h2></div>
-    ${profile.geminiKey ? '' : '<div class="card" style="margin-bottom:16px">결과를 만들려면 먼저 AI 이용 키를 등록해 주세요. <a href="#/settings">설정으로 가기</a></div>'}
-    ${records.length ? listHTML(records, true) : `
-      <div class="card empty">
-        <b>아직 기록이 없습니다</b>
-        왼쪽에서 내담자를 골라 첫 기록을 만들거나, 새 내담자를 추가해 보세요.
-        <div style="margin-top:18px"><button class="btn ghost" id="emptyAddClient">+ 내담자 추가</button></div>
-      </div>`}`;
+    ${onboardHTML()}
+    ${records.length ? listHTML(records, true) : ''}`;   // 기록이 없으면 위 시작하기 안내가 다음 할 일을 보여줌
   on('#emptyAddClient', 'click', addClient);
+  on('#obClient', 'click', addClient);
   bindList();
 }
 
@@ -682,8 +703,18 @@ const ICON = {
 };
 const shortDay = fmtDay;
 const picked = () => sel?.ids || new Set();
+// 목록 정렬: 최근 작성순(기본) / 상담일순. 상담일 = 제목의 회기 날짜·시간, 없으면 작성일. 회기 번호는 바꾸지 않음.
+const SORTS = { recent: '최근 작성순', sessionDesc: '상담일 최신순', sessionAsc: '상담일 오래된순' };
+const sessionTs = (r) => (r.title && parseHeader(r.title).ts) || r.writtenAt || r.createdAt || 0;
+function sortList(list) {
+  const k = SORTS[prefs.listSort] ? prefs.listSort : 'recent';
+  const a = list.slice();
+  if (k === 'recent') return a.sort((x, y) => (y.createdAt || 0) - (x.createdAt || 0));
+  return a.sort((x, y) => (k === 'sessionAsc' ? 1 : -1) * (sessionTs(x) - sessionTs(y) || (x.createdAt || 0) - (y.createdAt || 0)));
+}
 function listInner() {
-  const { list, showClient } = curList;
+  const { showClient } = curList;
+  const list = sortList(curList.list);
   if (!list.length) return '<div class="card empty"><b>아직 기록이 없습니다</b>오른쪽 위 [+ 상담일지] 또는 [+ 사례 분석]으로 첫 기록을 만들어 보세요.</div>';
   const ids = picked(), n = ids.size, all = n === list.length;
   return `
@@ -692,6 +723,7 @@ function listInner() {
       <input type="checkbox" id="selAll" ${all ? 'checked' : ''} data-mixed="${n && !all ? 1 : 0}" aria-label="${all ? '전체 해제' : '전체 선택'}">
       <span>${n ? `<b>${n}</b>건 선택됨` : `기록 ${list.length}건`}</span>
     </label>
+    ${!n ? `<label class="sort-wrap"><span class="sr-only">정렬</span><select id="listSort" class="sort-select">${Object.entries(SORTS).map(([k, t]) => `<option value="${k}" ${(prefs.listSort || 'recent') === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>` : ''}
     ${n ? `<div class="row bar-actions">
       <button class="btn h32" id="selGen">결과 만들기</button>
       <button class="btn danger h32" id="selDel">삭제</button>
@@ -746,9 +778,10 @@ function toggleMenu(btn) {
   closeMenus();
   if (!willOpen) return;
   menu.hidden = false; btn.setAttribute('aria-expanded', 'true');
-  menu.querySelector('button')?.focus();
+  menu.querySelector('[role=menuitem], button')?.focus();
 }
-document.addEventListener('click', (ev) => { if (!ev.target.closest('.more')) closeMenus(); });
+document.addEventListener('click', (ev) => { if (!ev.target.closest('.more') || ev.target.closest('.more-menu a')) closeMenus(); });
+$('#acctBtn').onclick = () => toggleMenu($('#acctBtn'));
 document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeMenus(); });
 
 function bindList() {
@@ -764,6 +797,7 @@ function bindList() {
     const all = picked().size === curList.list.length;
     sel = { ids: new Set(all ? [] : curList.list.map((r) => r.id)) }; renderList(); $('#selAll')?.focus();
   });
+  on('#listSort', 'change', (e) => { prefs.listSort = e.target.value; savePrefs(prefs); renderList(); $('#listSort')?.focus(); });
   on('#selCancel', 'click', () => { sel = null; renderList(); $('#selAll')?.focus(); });
   on('#selGen', 'click', () => openBatchRun(curList.list.filter((r) => picked().has(r.id))));
   on('#selDel', 'click', () => trashRecords([...picked()]));
@@ -801,6 +835,7 @@ function parseHeader(line) {
   let y = null, mo = null, d = null, h = null, mi = 0;
   let m = rest.match(/(\d{4})\s*[.\-/년]\s*(\d{1,2})\s*[.\-/월]\s*(\d{1,2})\s*일?/);
   if (m) { y = +m[1]; mo = +m[2]; d = +m[3]; rest = rest.replace(m[0], ' '); }
+  else if ((m = rest.match(/(?<![\d.])(\d{2})\.(\d{1,2})\.(\d{1,2})(?![\d.])/))) { y = 2000 + +m[1]; mo = +m[2]; d = +m[3]; rest = rest.replace(m[0], ' '); }   // 26.10.15 (서비스 날짜 형식)
   else if ((m = rest.match(/(\d{1,2})\s*월\s*(\d{1,2})\s*일?/) || rest.match(/(?<![\d:])(\d{1,2})\s*[/.]\s*(\d{1,2})(?![\d:])/))) {
     mo = +m[1]; d = +m[2]; rest = rest.replace(m[0], ' ');
   }
@@ -2445,28 +2480,38 @@ async function run() {
 }
 
 // ---------- 설정 ----------
+let keyEdit = false;   // 설정: 등록된 키가 있을 때 [키 변경]을 눌러야 입력칸이 나옴
+const maskKey = (k) => (k.length > 8 ? '••••••••' + k.slice(-4) : '••••••••');
 function viewSettings() {
+  const hasKey = !!profile.geminiKey, showForm = !hasKey || keyEdit;
   view.main = `
     <div class="page-head"><h2>설정</h2></div>
     <div class="stack">
       <div class="card">
         <h3>AI 이용 키 (처음 한 번만)</h3>
         <p class="sub">구글의 무료 AI 이용 키입니다. 카드 등록이 필요 없고, 한 번 등록하면 어느 기기에서 로그인해도 그대로 쓸 수 있습니다.</p>
-        <ol class="steps">
+        ${showForm ? `<ol class="steps">
           <li><span><a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">구글 AI 스튜디오 열기 ↗</a> 를 누르고 같은 구글 계정으로 로그인합니다.</span></li>
           <li><span>약관 동의 화면이 나오면 동의합니다.</span></li>
           <li><span><b>Create API key</b>(API 키 만들기)를 누릅니다.</span></li>
           <li><span>만들어진 키를 복사해서 아래 칸에 붙여넣고 <b>저장</b>을 누릅니다.</span></li>
         </ol>
         <div class="field">
-          <label for="keyInput">이용 키</label>
-          <input type="password" id="keyInput" placeholder="복사한 키를 붙여넣으세요" autocomplete="off" value="${esc(profile.geminiKey || '')}">
-          <div class="key-state ${profile.geminiKey ? 'ok' : ''}" id="keyState">${profile.geminiKey ? '✓ 등록된 키가 있습니다' : ''}</div>
+          <label for="keyInput">${hasKey ? '새 이용 키' : '이용 키'}</label>
+          <input type="password" id="keyInput" placeholder="복사한 키를 붙여넣으세요" autocomplete="off">
+          <div class="key-state" id="keyState"></div>
         </div>
         <div class="row">
           <button class="btn small" id="saveKey">저장</button>
-          ${profile.geminiKey ? '<button class="btn ghost small" id="removeKey">키 삭제</button>' : ''}
-        </div>
+          ${hasKey ? '<button class="btn ghost small" id="cancelKey">취소</button>' : ''}
+        </div>` : `
+        <div class="key-row">
+          <div><div class="key-ok">✓ 등록됨</div><code class="key-mask">${esc(maskKey(profile.geminiKey))}</code></div>
+          <div class="row">
+            <button class="btn ghost small" id="editKey">키 변경</button>
+            <button class="btn danger small" id="removeKey">키 삭제</button>
+          </div>
+        </div>`}
       </div>
       <div class="card">
         <h3>기록 내보내기</h3>
@@ -2478,7 +2523,6 @@ function viewSettings() {
       </div>
       <div class="card">
         <h3>계정</h3>
-        <p class="sub">기록은 서비스 개선을 위해 관리자가 열람할 수 있습니다. AI 이용 키는 본인만 볼 수 있습니다.</p>
         <p class="sub">${esc(user.email || '')} 으로 로그인되어 있습니다. 내담자 ${clients.length}명, 기록 ${records.length}건</p>
       </div>
     </div>`;
@@ -2486,7 +2530,9 @@ function viewSettings() {
   $('#exportTxt').onclick = () => exportRecords('txt');
   $('#exportJson').onclick = () => exportRecords('json');
   const state = (msg, cls) => { const s = $('#keyState'); s.className = 'key-state ' + (cls || ''); s.textContent = msg; };
-  $('#saveKey').onclick = async () => {
+  on('#editKey', 'click', () => { keyEdit = true; viewSettings(); $('#keyInput')?.focus(); });
+  on('#cancelKey', 'click', () => { keyEdit = false; viewSettings(); });
+  if ($('#saveKey')) $('#saveKey').onclick = async () => {
     const k = $('#keyInput').value.trim();
     if (!k) return state('키를 붙여넣어 주세요', 'bad');
     $('#saveKey').disabled = true;
@@ -2494,17 +2540,17 @@ function viewSettings() {
     try {
       models = await findModels(k);
       await setDoc(doc(db, 'users', user.uid, 'private', 'settings'), { geminiKey: k }, { merge: true });
-      profile.geminiKey = k;
-      state('✓ 저장했습니다. 이제 기록을 만들 수 있어요', 'ok');
+      profile.geminiKey = k; keyEdit = false;
+      viewSettings(); toast('키를 저장했어요. 이제 결과를 만들 수 있어요');
     } catch (e) {
       state(friendlyError(e), 'bad');
-    } finally { $('#saveKey').disabled = false; }
+    } finally { if ($('#saveKey')) $('#saveKey').disabled = false; }
   };
   const rm = $('#removeKey');
   if (rm) rm.onclick = async () => {
     if (!(await confirmModal({ title: '이용 키 삭제', message: '저장된 AI 이용 키를 지웁니다. 다시 쓰려면 키를 새로 등록해야 합니다.', okLabel: '키 삭제', danger: true }))) return;
     await setDoc(doc(db, 'users', user.uid, 'private', 'settings'), { geminiKey: '' }, { merge: true });
-    profile.geminiKey = ''; models = null;
+    profile.geminiKey = ''; models = null; keyEdit = false;
     viewSettings();
   };
 }
