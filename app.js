@@ -721,14 +721,13 @@ function emptyArt(size = 88) {
 }
 const emptyHTML = (title, desc = '') => `<div class="card empty">${emptyArt()}<b>${title}</b>${desc}</div>`;
 
-// 내담자 요약 한 줄: 상담 횟수 · 결과 만든 수 · 마지막 상담일로부터 며칠
+// 내담자 요약 한 줄: 상담 횟수 · 마지막 상담일로부터 며칠
 function flowHTML(clientId) {
   const js = clientRecords(clientId).filter((r) => r.type === 'journal');
   if (!js.length) return '';
-  const done = js.filter((r) => r.result).length;
   const lastT = Math.max(0, ...js.map(sessionOf).filter(Boolean));
   const ago = lastT ? Math.floor((Date.now() - lastT) / 864e5) : null;
-  return `상담 ${js.length}회 · 결과 ${done}/${js.length}${ago !== null ? ` · 마지막 상담 ${ago <= 0 ? '오늘' : ago + '일 전'}` : ''}`;
+  return `상담 ${js.length}회${ago !== null ? ` · 마지막 상담 ${ago <= 0 ? '오늘' : ago + '일 전'}` : ''}`;
 }
 
 // ---------- 기록 목록 ----------
