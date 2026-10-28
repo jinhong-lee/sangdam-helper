@@ -451,6 +451,7 @@ function viewClient(id) {
   const list = clientRecords(id);
   view.main = `
     <div class="page-head" style="align-items:center">
+      <div class="head-l">
       <div class="name-row">
         <h2>${esc(c.name)}</h2>
         <div class="more">
@@ -461,6 +462,8 @@ function viewClient(id) {
           </div>
         </div>
       </div>
+      <p class="client-meta" id="flowWrap" data-client="${id}">${flowHTML(id)}</p>
+      </div>
       <div class="row">
         <a class="btn h32 new-rec" href="#/new/${id}/journal">${ic('plus')}상담일지 쓰기</a>
         <a class="btn soft h32" href="#/new/${id}/analysis">${ic('plus')}사례 분석 쓰기</a>
@@ -468,11 +471,9 @@ function viewClient(id) {
     </div>
     <div class="stack">
       ${profileCardHTML(c)}
-      <div id="flowWrap" data-client="${id}">${flowHTML(id)}</div>
       ${listHTML(list, false)}
     </div>`;
   bindProfileCard(c);
-  const track = $('.flow-track'); if (track) track.scrollLeft = track.scrollWidth;   // 최근 회기가 보이게
   $('#moreBtn').onclick = () => toggleMenu($('#moreBtn'));
   const closeMenu = closeMenus;
   $('#renameBtn').onclick = async () => {
@@ -721,37 +722,14 @@ function emptyArt(size = 88) {
 }
 const emptyHTML = (title, desc = '') => `<div class="card empty">${emptyArt()}<b>${title}</b>${desc}</div>`;
 
-// 회기 흐름: 상담일지를 상담일 순서로 한 줄에. 점 = 회기(채움: 결과 있음 / 빈 원: 결과 없음), 점 사이가 10일 이상 벌어지면 간격 표시.
+// 내담자 요약 한 줄: 상담 횟수 · 결과 만든 수 · 마지막 상담일로부터 며칠
 function flowHTML(clientId) {
-  const js = clientRecords(clientId).filter((r) => r.type === 'journal').slice().sort((a, b) => chronoOf(a) - chronoOf(b));
+  const js = clientRecords(clientId).filter((r) => r.type === 'journal');
   if (!js.length) return '';
-  const DAY = 864e5, md = (t) => { const d = new Date(t); return `${p2(d.getMonth() + 1)}.${p2(d.getDate())}`; };
-  let maxN = 0, prevT = null, html = '';
-  js.forEach((r, i) => {
-    const t = sessionOf(r), n = parseHeader(r.title || '').n || i + 1;
-    maxN = Math.max(maxN, n);
-    const b = batchState(r.id), st = b ? 'run' : r.result ? 'done' : 'todo';
-    if (i) {
-      const gap = t && prevT ? Math.round((t - prevT) / DAY) : null;
-      html += `<li class="fl-gap${gap >= 10 ? ' long' : ''}" aria-hidden="true">${gap >= 10 ? `<span>${gap}일</span>` : ''}</li>`;
-    }
-    prevT = t || prevT;
-    html += `<li class="fl-node ${st}"><a href="#/r/${r.id}" title="${esc(r.title)} · ${r.result ? '결과 있음' : '결과 없음'}">
-      <span class="fl-dot">${n}</span><span class="fl-date">${t ? md(t) : '날짜 없음'}</span></a></li>`;
-  });
-  html += `<li class="fl-gap next" aria-hidden="true"></li><li class="fl-node next"><a href="#/new/${clientId}/journal" title="${maxN + 1}회기 상담일지 쓰기">
-    <span class="fl-dot">${ic('plus', 14)}</span><span class="fl-date">${maxN + 1}회기</span></a></li>`;
   const done = js.filter((r) => r.result).length;
-  const lastT = js.map(sessionOf).filter(Boolean).pop();
-  const ago = lastT ? Math.floor((Date.now() - lastT) / DAY) : null;
-  return `<section class="card flow" aria-label="회기 흐름">
-    <div class="flow-head">
-      <h3>회기 흐름</h3>
-      <span class="flow-meta">상담 ${js.length}회 · 결과 ${done}/${js.length}${ago !== null ? ` · 마지막 상담 ${ago <= 0 ? '오늘' : ago + '일 전'}` : ''}</span>
-    </div>
-    <ol class="flow-track">${html}</ol>
-    <div class="flow-legend"><span><i class="lg done"></i>결과 있음</span><span><i class="lg todo"></i>결과 없음</span></div>
-  </section>`;
+  const lastT = Math.max(0, ...js.map(sessionOf).filter(Boolean));
+  const ago = lastT ? Math.floor((Date.now() - lastT) / 864e5) : null;
+  return `상담 ${js.length}회 · 결과 ${done}/${js.length}${ago !== null ? ` · 마지막 상담 ${ago <= 0 ? '오늘' : ago + '일 전'}` : ''}`;
 }
 
 // ---------- 기록 목록 ----------
@@ -1826,7 +1804,7 @@ function renderBatch(full = false) {
       }
     }
   }
-  if (full) { renderList(); const fw = $('#flowWrap'); if (fw) paint(fw, flowHTML(fw.dataset.client)); }   // 목록·회기 흐름에 '만드는 중' 반영
+  if (full) { renderList(); const fw = $('#flowWrap'); if (fw) paint(fw, flowHTML(fw.dataset.client)); }   // 목록·요약 한 줄 갱신
 }
 function openBatchModal() {
   if (!batch || $('#batchModal')) return;
