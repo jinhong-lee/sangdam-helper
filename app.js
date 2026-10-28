@@ -13,14 +13,14 @@ const TYPE = { analysis: '사례 분석', journal: '상담일지' };
 // 관리자: 모든 사용자의 기록을 읽기 전용으로 볼 수 있음 (firestore.rules의 isAdmin과 같은 목록이어야 함)
 const ADMINS = ['leejjinhong@gmail.com'];
 const isAdminUser = () => !!user && ADMINS.includes(user.email);
-// 라인 아이콘 (헤더 버튼·쓰레기통)
+// 라인 아이콘 (헤더 버튼·휴지통)
 const LINE_ICON = {
   trash: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
 };
 const SHORT_TYPE = { journal: '일지', analysis: '분석' };   // 메뉴·목록의 종류 표시 (같은 말로 통일)
 const SHORT = { analysis: '사례', journal: '일지' }; // 다시 생성 버튼용 짧은 이름
 const HISTORY_COUNT = 3;
-const TRASH_DAYS = 30;   // 쓰레기통 보관 기간. 지난 것은 앱을 열 때 영구 삭제 (서버 기능 없이 처리 → 추가 비용 없음)
+const TRASH_DAYS = 30;   // 휴지통 보관 기간. 지난 것은 앱을 열 때 영구 삭제 (서버 기능 없이 처리 → 추가 비용 없음)
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -88,8 +88,8 @@ let auth, db, user = null;
 let profile = {};
 let clients = [];
 let records = [];
-let trash = [];          // 쓰레기통에 있는 기록 (deletedAt 있음)
-let trashClients = [];   // 쓰레기통에 있는 내담자
+let trash = [];          // 휴지통에 있는 기록 (deletedAt 있음)
+let trashClients = [];   // 휴지통에 있는 내담자
 let models = null;
 let sel = null;          // 기록 선택 모드: { ids: Set }
 let curList = null;      // 지금 화면의 기록 목록 { list, showClient }
@@ -298,7 +298,7 @@ function renderNav() {
   { const [, pg, id] = (location.hash || '#/').split('/');
     const rec = pg === 'r' && records.find((r) => r.id === id);
     const cid = pg === 'c' || pg === 'new' ? id : rec?.clientId;
-    $('#navToggleName').textContent = cid ? clientName(cid) : pg === 'trash' ? '쓰레기통' : pg === 'settings' ? '설정' : '전체 기록'; }
+    $('#navToggleName').textContent = cid ? clientName(cid) : pg === 'trash' ? '휴지통' : pg === 'settings' ? '설정' : '전체 기록'; }
   view.nav = `
     ${groups.map(({ c, recs, total }) => {
       const open = q ? true : navToggled.has(c.id) ? navToggled.get(c.id) : c.id === curClient;
@@ -315,7 +315,7 @@ function renderNav() {
       </div>`;
     }).join('')}
     ${q && !groups.length ? '<div class="nav-empty">검색 결과가 없습니다</div>' : ''}
-    ${!q && !viewAs ? `<a href="#/trash" class="nav-trash ${page === 'trash' ? 'on' : ''}"><span class="nav-ic">${LINE_ICON.trash}쓰레기통</span> <span class="cnt">${trashRows().length}</span></a>` : ''}
+    ${!q && !viewAs ? `<div class="nav-sep" aria-hidden="true"></div><a href="#/trash" class="nav-trash ${page === 'trash' ? 'on' : ''}"><span class="nav-ic">${LINE_ICON.trash}휴지통</span> <span class="cnt">${trashRows().length}</span></a>` : ''}
 `;
   $('#nav').querySelectorAll('[data-tw]').forEach((b) => {
     b.onclick = () => { navToggled.set(b.dataset.tw, b.getAttribute('aria-expanded') !== 'true'); renderNav(); };
@@ -474,7 +474,7 @@ function viewClient(id) {
   };
   $('#delClientBtn').onclick = async () => {
     closeMenu();
-    if (!(await confirmModal({ title: '내담자 삭제', message: `"${c.name}"와 이 내담자의 기록 ${list.length}건을 쓰레기통으로 옮깁니다. ${TRASH_DAYS}일 안에는 쓰레기통에서 복구할 수 있어요.`, okLabel: '쓰레기통으로 옮기기', danger: true }))) return;
+    if (!(await confirmModal({ title: '내담자 삭제', message: `"${c.name}"와 이 내담자의 기록 ${list.length}건을 휴지통으로 옮깁니다. ${TRASH_DAYS}일 안에는 휴지통에서 복구할 수 있어요.`, okLabel: '휴지통으로 옮기기', danger: true }))) return;
     const now = Date.now();
     try {
       await commitOps([(b) => b.update(userDoc('clients', id), { deletedAt: now }), ...list.map((r) => (b) => b.update(userDoc('records', r.id), { deletedAt: now }))]);
@@ -483,7 +483,7 @@ function viewClient(id) {
     records = records.filter((r) => r.clientId !== id); trash.push(...list);
     clients = clients.filter((x) => x.id !== id); trashClients.push(c);
     location.hash = '#/';
-    toastAction(`"${c.name}"를 쓰레기통으로 옮겼어요`, '되돌리기', async () => {
+    toastAction(`"${c.name}"를 휴지통으로 옮겼어요`, '되돌리기', async () => {
       await restoreItems([{ kind: 'client', id: c.id, item: c, clientId: c.id, deletedAt: now }]);
       toast('되돌렸어요'); location.hash = '#/c/' + c.id; route();
     });
@@ -705,6 +705,7 @@ function listHTML(list, showClient) {
 const ICON = {
   journal: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h10l3 3v15H6z"/><path d="M9 9h7M9 13h7M9 17h4"/></svg>',
   analysis: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m20 20-4.2-4.2M8.5 11h5M11 8.5v5"/></svg>',
+  client: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
   check: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>',
 };
 const shortDay = fmtDay;
@@ -1117,7 +1118,7 @@ async function loadUserData(uid) {
     getDocs(collection(db, 'users', uid, 'records')),
   ]);
   return {
-    // 쓰레기통에 있는 것은 관리자 집계·화면에서 제외
+    // 휴지통에 있는 것은 관리자 집계·화면에서 제외
     clients: cs.docs.map((d) => ({ id: d.id, ...d.data() })).filter((c) => !c.deletedAt).sort((a, b) => a.name.localeCompare(b.name, 'ko')),
     records: rs.docs.map((d) => ({ id: d.id, ...d.data() })).filter((r) => !r.deletedAt).sort((a, b) => writtenOf(b) - writtenOf(a)),
   };
@@ -1197,7 +1198,7 @@ function screenLabel() {
   if (page === 'c') return `${clientName(a)} · 내담자 화면`;
   if (page === 'r') { const r = records.find((x) => x.id === a); return r ? `${clientName(r.clientId)} · ${TYPE[r.type]} 기록 화면` : '기록 화면'; }
   if (page === 'new') return `${clientName(a)} · 새 ${TYPE[b] || '기록'} 작성`;
-  return { trash: '쓰레기통', settings: '설정', admin: '관리자' }[page] || '전체 기록';
+  return { trash: '휴지통', settings: '설정', admin: '관리자' }[page] || '전체 기록';
 }
 function deviceLabel() {
   const ua = navigator.userAgent;
@@ -1407,7 +1408,7 @@ function confirmDelete(title, message) {
   });
 }
 
-// 기록 삭제: 바로 지우지 않고 쓰레기통으로 (되돌리기 알림 + 30일 보관)
+// 기록 삭제: 바로 지우지 않고 휴지통으로 (되돌리기 알림 + 30일 보관)
 async function removeRecord(id) {
   const r = records.find((x) => x.id === id);
   if (editor) editor.dirty = false;
@@ -1425,14 +1426,14 @@ async function trashRecords(ids, reroute = true) {
   moved.forEach((r) => (r.deletedAt = now));
   records = records.filter((r) => !ids.includes(r.id)); trash.push(...moved);
   if (reroute) route();
-  toastAction(`${ids.length > 1 ? ids.length + '건을' : '기록을'} 쓰레기통으로 옮겼어요`, '되돌리기', async () => {
+  toastAction(`${ids.length > 1 ? ids.length + '건을' : '기록을'} 휴지통으로 옮겼어요`, '되돌리기', async () => {
     await restoreItems(moved.map((r) => ({ kind: 'record', id: r.id, item: r, clientId: r.clientId })));
     toast('되돌렸어요'); route();
   });
   return true;
 }
 
-// ---------- 쓰레기통 ----------
+// ---------- 휴지통 ----------
 const trashKey = (x) => x.kind + ':' + x.id;
 function trashRows() {
   const rows = trash.map((r) => ({ kind: 'record', id: r.id, item: r, clientId: r.clientId, deletedAt: r.deletedAt }));
@@ -1441,10 +1442,10 @@ function trashRows() {
   return rows.sort((a, b) => b.deletedAt - a.deletedAt || (a.kind === 'client' ? -1 : b.kind === 'client' ? 1 : 0));
 }
 const anyClientName = (id) => (clients.find((c) => c.id === id) || trashClients.find((c) => c.id === id))?.name || '(알 수 없음)';
-// 내담자와 함께 삭제된 기록 = 같은 시각에 쓰레기통으로 간 그 내담자의 기록
+// 내담자와 함께 삭제된 기록 = 같은 시각에 휴지통으로 간 그 내담자의 기록
 const codeleted = (c) => trash.filter((r) => r.clientId === c.id && r.deletedAt === c.deletedAt);
 
-// 복구: 기록을 살리면 내담자도 쓰레기통에 있을 때 함께 살림 / 내담자를 살리면 함께 삭제된 기록도 살림
+// 복구: 기록을 살리면 내담자도 휴지통에 있을 때 함께 살림 / 내담자를 살리면 함께 삭제된 기록도 살림
 async function restoreItems(rows) {
   const recIds = new Set(), cliIds = new Set();
   rows.forEach((x) => {
@@ -1463,7 +1464,7 @@ async function restoreItems(rows) {
   clients.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
   return recIds.size + cliIds.size;
 }
-// 영구 삭제: 내담자를 지우면 쓰레기통에 남은 그 내담자의 기록도 함께
+// 영구 삭제: 내담자를 지우면 휴지통에 남은 그 내담자의 기록도 함께
 async function purgeItems(rows) {
   const recIds = new Set(), cliIds = new Set();
   rows.forEach((x) => {
@@ -1489,36 +1490,50 @@ function viewTrash() {
   const left = (x) => Math.max(0, Math.ceil((x.deletedAt + TRASH_DAYS * 864e5 - Date.now()) / 864e5));
   view.main = `
     <div class="page-head" style="align-items:center">
-      <h2>쓰레기통</h2>
-      ${all.length ? '<div class="row"><button class="btn ghost h32" id="tRestoreAll">모두 복구</button><button class="btn danger h32" id="tEmpty">쓰레기통 비우기</button></div>' : ''}
+      <h2>휴지통</h2>
+      ${all.length ? '<div class="row"><button class="btn ghost h32" id="tRestoreAll">모두 복구</button><button class="btn danger h32" id="tEmpty">휴지통 비우기</button></div>' : ''}
     </div>
     <p class="sub">삭제한 기록과 내담자는 ${TRASH_DAYS}일 동안 보관한 뒤 자동으로 영구 삭제돼요.</p>
     ${all.length ? `
-    <div class="list-tools">
-      <div class="row">
-        <label class="check" style="align-items:center"><input type="checkbox" id="tAll" ${n && n === rows.length ? 'checked' : ''}> 전체 선택</label>
-        ${names.length > 1 ? `<select id="tFilter" aria-label="내담자로 거르기"><option value="">모든 내담자</option>${names.map(([id, nm]) => `<option value="${id}" ${id === trashFilter ? 'selected' : ''}>${esc(nm)}</option>`).join('')}</select>` : ''}
-      </div>
-      <div class="row">
-        <button class="btn h32" id="tRestore" ${n ? '' : 'disabled'}>복구${n ? ` ${n}건` : ''}</button>
-        <button class="btn danger h32" id="tPurge" ${n ? '' : 'disabled'}>영구 삭제${n ? ` ${n}건` : ''}</button>
-      </div>
+    <div class="list-bar${n ? ' active' : ''}">
+      <label class="bar-check">
+        <input type="checkbox" id="tAll" ${n && n === rows.length ? 'checked' : ''} data-mixed="${n && n < rows.length ? 1 : 0}" aria-label="${n && n === rows.length ? '전체 해제' : '전체 선택'}">
+        <span>${n ? `<b>${n}</b>건 선택됨` : `${rows.length}건`}</span>
+      </label>
+      ${n ? `<div class="row bar-actions">
+        <button class="btn h32" id="tRestore">복구</button>
+        <button class="btn danger h32" id="tPurge">영구 삭제</button>
+        <button class="btn ghost h32" id="tCancel">취소</button>
+      </div>` : names.length > 1 ? `<label class="sort-wrap"><span class="sr-only">내담자로 거르기</span><select id="tFilter" class="sort-select"><option value="">모든 내담자</option>${names.map(([id, nm]) => `<option value="${id}" ${id === trashFilter ? 'selected' : ''}>${esc(nm)}</option>`).join('')}</select></label>` : ''}
     </div>
-    <div class="list selecting">${rows.map((x) => {
-      const k = trashKey(x), isC = x.kind === 'client';
-      return `<div class="item trash-item${trashSel.has(k) ? ' picked' : ''}" data-tkey="${k}">
-        <input type="checkbox" class="pick" data-tpick="${k}" ${trashSel.has(k) ? 'checked' : ''} aria-label="${esc(isC ? x.item.name : x.item.title)} 선택">
+    <div class="list">${rows.map((x) => {
+      const k = trashKey(x), isC = x.kind === 'client', on = trashSel.has(k), kind = isC ? 'client' : x.item.type;
+      const name = isC ? x.item.name : x.item.title;
+      const info = isC ? `기록 ${codeleted(x.item).length}건과 함께 삭제`
+        : `${anyClientName(x.clientId)}${trashClients.some((c) => c.id === x.clientId) ? ' (삭제된 내담자)' : ''} · ${sessionOf(x.item) ? '상담 ' + fmtDay(sessionOf(x.item)) : '작성 ' + fmtDay(writtenOf(x.item))}`;
+      return `
+      <div class="item trash-item${on ? ' picked' : ''}" data-tkey="${k}">
+        <button type="button" class="thumb ${kind}" data-tpick="${k}" aria-pressed="${on}" aria-label="${esc(name)} 선택">
+          <span class="thumb-icon">${ICON[kind] || ICON.journal}</span><span class="thumb-check">${ICON.check}</span>
+        </button>
         <div class="item-body">
-          <div class="item-title"><span class="tag ${isC ? 'client' : x.item.type}">${isC ? '내담자' : TYPE[x.item.type]}</span>${esc(isC ? x.item.name : x.item.title)}</div>
-          <div class="item-meta">${isC ? `기록 ${codeleted(x.item).length}건과 함께 삭제` : `${esc(anyClientName(x.clientId))}${trashClients.some((c) => c.id === x.clientId) ? ' (삭제된 내담자)' : ''} · ${sessionOf(x.item) ? '상담 ' + fmtDay(sessionOf(x.item)) : '작성 ' + fmtDay(writtenOf(x.item))}`} · ${fmtDay(x.deletedAt)} 삭제 · <span class="trash-left">${left(x)}일 후 영구 삭제</span></div>
+          <div class="item-title">
+            <span class="it-name">${esc(name)}</span>
+            <span class="it-date" title="삭제한 날">${fmtDay(x.deletedAt)} 삭제</span>
+            <span class="it-state left">${left(x)}일 남음</span>
+          </div>
+          <div class="item-line"><b>${isC ? '내담자' : SHORT_TYPE[x.item.type]}</b><span class="it-preview">${esc(info)}</span></div>
         </div>
-        <div class="item-actions">
-          <button class="btn ghost small" data-trestore="${k}">복구</button>
-          <button class="btn danger small" data-tpurge="${k}">영구 삭제</button>
+        <div class="more">
+          <button class="more-btn" data-more aria-haspopup="menu" aria-expanded="false" aria-label="휴지통 항목 메뉴">⋯</button>
+          <div class="more-menu right" role="menu" hidden>
+            <button role="menuitem" data-trestore="${k}">복구</button>
+            <button role="menuitem" class="danger" data-tpurge="${k}">영구 삭제</button>
+          </div>
         </div>
       </div>`;
     }).join('')}</div>` : `
-    <div class="card empty"><b>쓰레기통이 비어 있어요</b>기록이나 내담자를 삭제하면 여기에 ${TRASH_DAYS}일 동안 보관돼요.</div>`}`;
+    <div class="card empty"><b>휴지통이 비어 있어요</b>기록이나 내담자를 삭제하면 여기에 ${TRASH_DAYS}일 동안 보관돼요.</div>`}`;
 
   const byKey = (k) => rows.find((x) => trashKey(x) === k);
   const done = (msg) => { trashSel.clear(); viewTrash(); renderNav(); toast(msg); };
@@ -1531,24 +1546,23 @@ function viewTrash() {
     try { await purgeItems(list); done('영구 삭제했어요'); }
     catch { toast('삭제하지 못했습니다. 인터넷 연결을 확인해 주세요.'); }
   };
+  const toggle = (k) => { trashSel.has(k) ? trashSel.delete(k) : trashSel.add(k); viewTrash(); $(`[data-tpick="${k}"]`)?.focus(); };
+  // 카드를 누르면 고르기 (휴지통 항목은 열어볼 화면이 없음)
   $('#main').querySelectorAll('[data-tkey]').forEach((el) => {
-    el.onclick = (e) => {
-      if (e.target.closest('button, input')) return;
-      const k = el.dataset.tkey; trashSel.has(k) ? trashSel.delete(k) : trashSel.add(k); viewTrash();
-      $(`[data-tpick="${k}"]`)?.focus();
-    };
+    el.onclick = (e) => { if (e.target.closest('.thumb, .more, button')) return; toggle(el.dataset.tkey); };
   });
-  $('#main').querySelectorAll('[data-tpick]').forEach((cb) => {
-    cb.onchange = () => { cb.checked ? trashSel.add(cb.dataset.tpick) : trashSel.delete(cb.dataset.tpick); viewTrash(); $(`[data-tpick="${cb.dataset.tpick}"]`)?.focus(); };
-  });
-  $('#main').querySelectorAll('[data-trestore]').forEach((b) => { b.onclick = () => restore([byKey(b.dataset.trestore)]); });
-  $('#main').querySelectorAll('[data-tpurge]').forEach((b) => { b.onclick = () => purge([byKey(b.dataset.tpurge)], '영구 삭제'); });
-  on('#tAll', 'change', (e) => { trashSel = new Set(e.target.checked ? rows.map(trashKey) : []); viewTrash(); $('#tAll')?.focus(); });
+  $('#main').querySelectorAll('[data-tpick]').forEach((b) => { b.onclick = () => toggle(b.dataset.tpick); });
+  $('#main').querySelectorAll('.trash-item [data-more]').forEach((b) => { b.onclick = () => toggleMenu(b); });
+  $('#main').querySelectorAll('[data-trestore]').forEach((b) => { b.onclick = () => { closeMenus(); restore([byKey(b.dataset.trestore)]); }; });
+  $('#main').querySelectorAll('[data-tpurge]').forEach((b) => { b.onclick = () => { closeMenus(); purge([byKey(b.dataset.tpurge)], '영구 삭제'); }; });
+  const box = $('#tAll'); if (box) box.indeterminate = box.dataset.mixed === '1';
+  on('#tAll', 'change', () => { trashSel = new Set(trashSel.size === rows.length ? [] : rows.map(trashKey)); viewTrash(); $('#tAll')?.focus(); });
+  on('#tCancel', 'click', () => { trashSel.clear(); viewTrash(); $('#tAll')?.focus(); });
   on('#tFilter', 'change', (e) => { trashFilter = e.target.value; trashSel.clear(); viewTrash(); $('#tFilter')?.focus(); });
   on('#tRestore', 'click', () => restore(rows.filter((x) => trashSel.has(trashKey(x)))));
   on('#tPurge', 'click', () => purge(rows.filter((x) => trashSel.has(trashKey(x))), '영구 삭제'));
   on('#tRestoreAll', 'click', () => restore(all));
-  on('#tEmpty', 'click', () => purge(all, '쓰레기통 비우기'));
+  on('#tEmpty', 'click', () => purge(all, '휴지통 비우기'));
 }
 
 // ---------- 고른 기록 결과 한꺼번에 만들기 ----------

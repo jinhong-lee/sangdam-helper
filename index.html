@@ -308,7 +308,7 @@
   .tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-right: 6px; vertical-align: 1px; }
   .tag.analysis { background: var(--accent-soft); color: var(--accent); }
   .tag.journal { background: var(--primary-soft); color: var(--primary); }
-  /* 기록 선택 · 쓰레기통 */
+  /* 기록 선택 · 휴지통 */
   .list-tools { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
   .list-tools .row { gap: 12px; }
   .item .pick { margin-top: 3px; width: 17px; height: 17px; accent-color: var(--primary); flex-shrink: 0; cursor: pointer; }
@@ -344,14 +344,17 @@
   .item-actions { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
   .trash-left { color: var(--accent); }
   .tag.client { background: var(--surface-2); color: var(--text-2); }
-  .nav a.nav-trash { margin-top: 10px; border-top: 1px solid var(--border); border-radius: 0 0 9px 9px; padding-top: 10px; color: var(--text-2); }
+  .nav-sep { height: 1px; margin: 10px 0 4px; background: var(--border); }   /* 휴지통 위 구분선, 선과 휴지통 사이 4px */
+  .nav a.nav-trash { color: var(--text-2); }
   .nav a.nav-trash.on { color: var(--primary); }
-  @media (max-width: 860px) { .nav a.nav-trash { margin-top: 0; border-radius: 9px; padding-top: 8px; border: 1px solid var(--border); } }
+
   select { font: inherit; font-size: 13px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; height: 32px; padding: 0 8px; }
   .batch-row { align-items: center; }
   .batch-row .imp-main { gap: 2px; font-size: 14px; }
   .batch-row .imp-status { margin-top: 0; }
-  @media (max-width: 640px) { .trash-item { flex-wrap: wrap; } .trash-item .item-actions { width: 100%; justify-content: flex-end; } }
+  .trash-item { cursor: pointer; }
+  .thumb.client { background: var(--surface-2); color: var(--text-2); }
+  .it-state.left { background: var(--accent-soft); color: var(--accent); }
   /* 내담자 정보: 화면 요약 카드 */
   .pf-card { padding: 16px 20px; }
   .pf-empty { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
