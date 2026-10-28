@@ -72,11 +72,11 @@
   /* 글자 위계 — 단계 사이를 확실히 벌려서 "다 비슷한 크기"가 되지 않게 (Pretendard)
      ① 화면 제목 28/700 (내담자명·기록 제목, 모바일 24, 로그인 32)
      ② 영역 제목 18/700 (카드·창 제목 20)
-     ③ 본문 15/400 · 목록 제목 15/600 (긴 글·입력한 내용·결과)
+     ③ 본문 15/400 · 목록 제목 15/700 (긴 글·입력한 내용·결과)
      ④ 보조 13/400 회색 (설명·미리보기·날짜·메뉴·버튼)
-     ⑤ 꼬리표 11/600 (태그·배지·라벨)
+     ⑤ 꼬리표 11/700 (태그·배지·라벨)
      행간·자간은 CDS typography 토큰을 크기에 맞춰 그대로 씀 (예: 28→38/-1.8, 18→26/-0.1, 15→22/0, 13→18/0, 11→14/0)
-     굵기는 ①② 제목만 700. 그 외 강조는 600, 나머지는 전부 400 — 굵은 글씨가 많으면 위계가 사라짐 */
+     굵기는 두 가지만: 굵게 700 / 보통 400 (로고만 800). 굵은 글씨가 많으면 위계가 사라지니 강조는 꼭 필요한 곳에만 */
   body {
     margin: 0;
     background: var(--bg);
@@ -140,17 +140,17 @@
     .side-body { padding: 0; overflow: visible; }
     #main { padding: 20px 16px 80px; }
   }
-  .side-title { font-size: 11px; line-height: 14px; letter-spacing: 0px; font-weight: 600; color: var(--text-2); margin: 0 0 8px 10px; }
+  .side-title { font-size: 11px; line-height: 14px; letter-spacing: 0px; font-weight: 700; color: var(--text-2); margin: 0 0 8px 10px; }
   .nav { display: grid; gap: 2px; }
   .nav a {
     display: flex; justify-content: space-between; align-items: center; gap: 8px;
     padding: 8px 12px; border-radius: 8px; color: var(--text); text-decoration: none; font-size: 14px; line-height: 22px; letter-spacing: 0px;
   }
   .nav a:hover { background: var(--surface-2); }
-  .nav a.on { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
+  .nav a.on { background: var(--primary-soft); color: var(--primary); font-weight: 700; }
   .nav .cnt { font-size: 12px; line-height: 16px; letter-spacing: 0px; color: var(--text-2); }
   .nav-gap { height: 14px; }
-  .nav-add { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; margin: -4px 0 6px; padding: 8px 12px; border: 0; border-radius: 8px; background: none; font: inherit; font-size: 14px; line-height: 22px; letter-spacing: 0px; font-weight: 600; color: var(--primary); cursor: pointer; }
+  .nav-add { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; margin: -4px 0 6px; padding: 8px 12px; border: 0; border-radius: 8px; background: none; font: inherit; font-size: 14px; line-height: 22px; letter-spacing: 0px; font-weight: 700; color: var(--primary); cursor: pointer; }
   .nav-add:hover { background: var(--surface-2); }
   .nav-search { position: relative; margin-bottom: 8px; }
   .nav-search svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--text-2); pointer-events: none; }
@@ -160,7 +160,7 @@
   .nav-tip { position: fixed; z-index: 200; max-width: 320px; padding: 8px 12px; border-radius: 8px; background: var(--text); color: var(--surface); font-size: 12px; line-height: 16px; letter-spacing: 0px; pointer-events: none; box-shadow: var(--shadow-pop); }
   .tree-row { display: flex; align-items: center; gap: 2px; }
   .tree-row a { flex: 1; min-width: 0; }
-  .nav a.parent { font-weight: 600; }
+  .nav a.parent { font-weight: 700; }
   .tw { width: 22px; height: 22px; flex-shrink: 0; border: 0; background: none; color: var(--text-2); cursor: pointer; border-radius: 8px; display: grid; place-items: center; padding: 0; transition: transform .15s; }
   .tw:hover { background: var(--surface-2); color: var(--text); }
   .tw[aria-expanded="true"] { transform: rotate(90deg); }
@@ -206,7 +206,7 @@
   .modal-sm { max-width: 420px; }
   .modal-lg { max-width: 720px; }
   .seg { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; margin-bottom: 18px; background: var(--surface-2); border-radius: 8px; width: fit-content; max-width: 100%; }
-  .seg-btn { height: 32px; padding: 0 16px; border: 0; border-radius: 8px; background: none; font: inherit; font-size: 13px; line-height: 18px; letter-spacing: 0px; font-weight: 600; color: var(--text-2); cursor: pointer; }
+  .seg-btn { height: 32px; padding: 0 16px; border: 0; border-radius: 8px; background: none; font: inherit; font-size: 13px; line-height: 18px; letter-spacing: 0px; font-weight: 700; color: var(--text-2); cursor: pointer; }
   .seg-btn:hover { color: var(--text); }
   .seg-btn.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
   .bulk-title { font-size: 18px; line-height: 26px; letter-spacing: -0.1px; margin: 0 0 4px; }
@@ -215,7 +215,7 @@
   .split-hint .btn { background: var(--surface); color: var(--primary); }
   .table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
   .admin-table { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 18px; letter-spacing: 0px; }
-  .admin-table th { text-align: left; font-size: 11px; line-height: 14px; letter-spacing: 0px; color: var(--text-2); font-weight: 600; padding: 12px 16px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .admin-table th { text-align: left; font-size: 11px; line-height: 14px; letter-spacing: 0px; color: var(--text-2); font-weight: 700; padding: 12px 16px; border-bottom: 1px solid var(--border); white-space: nowrap; }
   .admin-table td { padding: 12px 16px; border-bottom: 1px solid var(--border); white-space: nowrap; }
   .admin-table tr:last-child td { border-bottom: 0; }
   .admin-client { margin-bottom: 14px; }
@@ -238,7 +238,7 @@
   .read-meta { font-size: 13px; line-height: 18px; letter-spacing: 0px; color: var(--text-2); margin: 0 0 16px; }
   .read-title { font-size: 28px; line-height: 38px; letter-spacing: -1.8px; margin: 0 0 4px; overflow-wrap: anywhere; }
   .read-field + .read-field { margin-top: 14px; padding-top: 16px; border-top: 1px solid var(--border); }
-  .read-label { font-size: 11px; line-height: 14px; letter-spacing: 0px; font-weight: 600; color: var(--text-2); margin-bottom: 4px; }
+  .read-label { font-size: 11px; line-height: 14px; letter-spacing: 0px; font-weight: 700; color: var(--text-2); margin-bottom: 4px; }
   .read-value { font-size: 15px; line-height: 22px; letter-spacing: 0px; white-space: pre-wrap; overflow-wrap: anywhere; }
   .split-hint .btn:hover { background: var(--primary); color: var(--on-primary); }
   .bulk-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
@@ -275,7 +275,7 @@
 
   .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: 4px;
-    height: 32px; border: 0; border-radius: 8px; padding: 0 12px; font: inherit; font-size: 13px; line-height: 18px; letter-spacing: 0px; font-weight: 600; cursor: pointer;
+    height: 32px; border: 0; border-radius: 8px; padding: 0 12px; font: inherit; font-size: 13px; line-height: 18px; letter-spacing: 0px; font-weight: 700; cursor: pointer;
     background: var(--primary); color: var(--on-primary); text-decoration: none; white-space: nowrap;
   }
   .btn:hover { background: var(--primary-hover); }
@@ -292,7 +292,7 @@
   .link-btn { border: 0; background: none; color: var(--primary); font: inherit; font-size: 13px; line-height: 18px; letter-spacing: 0px; cursor: pointer; padding: 0; text-decoration: underline; text-underline-offset: 3px; }
 
   .field { margin-bottom: 16px; }
-  .field label { display: block; font-weight: 600; font-size: 14px; line-height: 22px; letter-spacing: 0px; margin-bottom: 6px; }
+  .field label { display: block; font-weight: 700; font-size: 14px; line-height: 22px; letter-spacing: 0px; margin-bottom: 6px; }
   textarea, input[type="text"], input[type="password"], input[type="search"] {
     width: 100%; font: inherit; color: var(--text);
     background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px 12px;
@@ -310,11 +310,11 @@
   .item { display: flex; gap: 12px; align-items: flex-start; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 16px; cursor: pointer; }
   .item:hover { border-color: var(--primary); }
   .item-body { flex: 1; min-width: 0; }
-  .item-title { font-weight: 600; font-size: 15px; line-height: 22px; letter-spacing: 0px; overflow-wrap: anywhere; }
+  .item-title { font-weight: 700; font-size: 15px; line-height: 22px; letter-spacing: 0px; overflow-wrap: anywhere; }
   .item-meta { font-size: 13px; line-height: 18px; letter-spacing: 0px; color: var(--text-2); margin-top: 2px; }
   .item-preview { font-size: 13px; line-height: 18px; letter-spacing: 0px; color: var(--text-2); margin-top: 6px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-  /* 상태 표시는 한 가지 모양: 11px · 600 · 4px 모서리 */
-  .tag { display: inline-block; font-size: 11px; line-height: 14px; letter-spacing: 0px; font-weight: 600; padding: 2px 8px; border-radius: 4px; margin-right: 8px; vertical-align: 1px; }
+  /* 상태 표시는 한 가지 모양: 11px · 700 · 4px 모서리 */
+  .tag { display: inline-block; font-size: 11px; line-height: 14px; letter-spacing: 0px; font-weight: 700; padding: 2px 8px; border-radius: 4px; margin-right: 8px; vertical-align: 1px; }
   .tag.analysis { background: var(--accent-soft); color: var(--accent); }
   .tag.journal { background: var(--primary-soft); color: var(--primary); }
   /* 기록 선택 · 휴지통 */
@@ -344,9 +344,9 @@
   .thumb[aria-pressed="true"] { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
   .thumb[aria-pressed="true"] .thumb-check { opacity: 1; }
   .item-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-  .it-name { font-weight: 600; font-size: 15px; line-height: 22px; letter-spacing: 0px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .it-name { font-weight: 700; font-size: 15px; line-height: 22px; letter-spacing: 0px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
   .it-date { flex-shrink: 0; font-size: 13px; line-height: 18px; letter-spacing: 0px; font-weight: 400; color: var(--text-2); }
-  .it-state { flex-shrink: 0; align-self: center; font-size: 11px; line-height: 14px; letter-spacing: 0px; font-weight: 600; padding: 2px 8px; border-radius: 4px; background: var(--surface-2); color: var(--text-2); }
+  .it-state { flex-shrink: 0; align-self: center; font-size: 11px; line-height: 14px; letter-spacing: 0px; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: var(--surface-2); color: var(--text-2); }
   .it-state.done { background: var(--primary-soft); color: var(--primary); }
   .item-line { display: flex; gap: 8px; margin-top: 3px; font-size: 13px; line-height: 18px; letter-spacing: 0px; min-width: 0; }
   .item-line b { flex-shrink: 0; font-weight: 400; color: var(--text-2); }
@@ -396,12 +396,12 @@
   .pf-body { padding: 12px 28px 8px; }
   .pf-notice { background: var(--primary-soft); border-radius: 12px; padding: 16px 16px; font-size: 13px; line-height: 18px; letter-spacing: 0px; color: var(--text-2); margin-bottom: 18px; }
   .pf-notice b { display: block; color: var(--primary); font-size: 14px; line-height: 22px; letter-spacing: 0px; margin-bottom: 2px; }
-  .pf-group-title { font-size: 15px; line-height: 22px; letter-spacing: 0px; font-weight: 600; margin: 24px 0 10px; }
+  .pf-group-title { font-size: 15px; line-height: 22px; letter-spacing: 0px; font-weight: 700; margin: 24px 0 10px; }
   .pf-group { border: 1px solid var(--border); border-radius: 12px; padding: 0 20px; background: var(--surface); }
   .pf-field { padding: 12px 0; border-top: 1px solid var(--border); }
   .pf-field:first-child { border-top: 0; }
-  .pf-field label { display: block; font-size: 11px; line-height: 14px; letter-spacing: 0px; font-weight: 600; color: var(--text-2); margin-bottom: 4px; }
-  .pf-hint { color: var(--primary); font-weight: 600; }
+  .pf-field label { display: block; font-size: 11px; line-height: 14px; letter-spacing: 0px; font-weight: 700; color: var(--text-2); margin-bottom: 4px; }
+  .pf-hint { color: var(--primary); font-weight: 700; }
   .pf-hint.bad { color: var(--error); }
   .pf-field input, .pf-field textarea, .pf-field select { width: 100%; border: 0; background: transparent; padding: 2px 0; font: inherit; font-size: 16px; line-height: 24px; letter-spacing: 0px; color: var(--text); border-radius: 0; }
   .pf-field textarea { resize: none; min-height: 0; overflow: hidden; }
@@ -444,7 +444,7 @@
   .lens:first-of-type { border-top: 0; }
   .lens input, .check input { margin-top: 4px; width: 17px; height: 17px; accent-color: var(--primary); flex-shrink: 0; }
   .lens .num { font-size: 12px; line-height: 16px; letter-spacing: 0px; color: var(--accent); font-weight: 700; }
-  .lens .t { font-weight: 600; font-size: 14px; line-height: 22px; letter-spacing: 0px; }
+  .lens .t { font-weight: 700; font-size: 14px; line-height: 22px; letter-spacing: 0px; }
   .lens .d { font-size: 13px; line-height: 18px; letter-spacing: 0px; color: var(--text-2); }
   .check { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; font-size: 14px; line-height: 22px; letter-spacing: 0px; }
   .check small { display: block; color: var(--text-2); font-size: 13px; line-height: 18px; letter-spacing: 0px; }
@@ -492,7 +492,7 @@
   .steps li::before { content: counter(s); flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; background: var(--primary-soft); color: var(--primary); font-weight: 700; font-size: 12px; line-height: 16px; letter-spacing: 0px; display: grid; place-items: center; margin-top: 1px; }
   .key-state { font-size: 13px; line-height: 18px; letter-spacing: 0px; margin-top: 8px; }
   .key-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 16px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); }
-  .key-ok { font-size: 13px; line-height: 18px; letter-spacing: 0px; font-weight: 600; color: var(--primary); }
+  .key-ok { font-size: 13px; line-height: 18px; letter-spacing: 0px; font-weight: 700; color: var(--primary); }
   .key-mask { font-size: 14px; line-height: 22px; color: var(--text-2); letter-spacing: .04em; }
   /* 처음 시작하기 안내 */
   .onboard { margin-bottom: 16px; }
@@ -500,7 +500,7 @@
   .ob-head .empty-art { margin: 0; flex-shrink: 0; }
   .onboard .ob-head h3 { margin: 0; }
   .onboard h3 { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
-  .ob-count { font-size: 11px; line-height: 14px; letter-spacing: 0px; font-weight: 600; padding: 2px 8px; border-radius: 4px; color: var(--primary); background: var(--primary-soft); }
+  .ob-count { font-size: 11px; line-height: 14px; letter-spacing: 0px; font-weight: 700; padding: 2px 8px; border-radius: 4px; color: var(--primary); background: var(--primary-soft); }
   .ob-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
   .ob-steps li { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 12px; }
   .ob-steps li.now { border-color: var(--primary); background: var(--primary-soft); }
@@ -509,7 +509,7 @@
   .ob-steps li.now .ob-num { background: var(--primary); color: var(--on-primary); }
   .ob-steps li.done .ob-num { background: var(--primary-soft); color: var(--primary); }
   .ob-text { flex: 1; min-width: 0; display: grid; gap: 2px; font-size: 14px; line-height: 22px; letter-spacing: 0px; }
-  .ob-text b { font-weight: 600; }
+  .ob-text b { font-weight: 700; }
   .ob-steps li.done .ob-text b { font-weight: 400; text-decoration: line-through; }
   .ob-text span { font-size: 13px; line-height: 18px; letter-spacing: 0px; color: var(--text-2); }
   @media (max-width: 560px) { .ob-steps li { flex-wrap: wrap; } .ob-steps li .btn { margin-left: 36px; } }
