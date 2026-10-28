@@ -468,9 +468,11 @@ function viewClient(id) {
     </div>
     <div class="stack">
       ${profileCardHTML(c)}
+      <div id="flowWrap" data-client="${id}">${flowHTML(id)}</div>
       ${listHTML(list, false)}
     </div>`;
   bindProfileCard(c);
+  const track = $('.flow-track'); if (track) track.scrollLeft = track.scrollWidth;   // 최근 회기가 보이게
   $('#moreBtn').onclick = () => toggleMenu($('#moreBtn'));
   const closeMenu = closeMenus;
   $('#renameBtn').onclick = async () => {
@@ -682,7 +684,7 @@ function onboardHTML() {
   if (steps.every((x) => x.done)) return '';
   const next = steps.findIndex((x) => !x.done);
   return `<div class="card onboard">
-    <h3>농지니 시작하기 <span class="ob-count">${steps.filter((x) => x.done).length}/3</span></h3>
+    <div class="ob-head">${emptyArt(40)}<h3>농지니 시작하기 <span class="ob-count">${steps.filter((x) => x.done).length}/3</span></h3></div>
     <ol class="ob-steps">${steps.map((x, i) => `
       <li class="${x.done ? 'done' : i === next ? 'now' : ''}">
         <span class="ob-num" aria-hidden="true">${x.done ? ic('check', 14) : i + 1}</span>
@@ -704,6 +706,52 @@ function viewHome() {
   on('#emptyAddClient', 'click', addClient);
   on('#obClient', 'click', addClient);
   bindList();
+}
+
+// ---------- 농지니다운 요소: 회기 흐름 · 빈 화면 그림 ----------
+// 빈 화면 그림: 로고의 '말풍선 속 새싹'을 연한 색으로 (상담 대화 속에서 아이가 자람)
+function emptyArt(size = 88) {
+  return `<svg class="empty-art" viewBox="0 0 96 96" width="${size}" height="${size}" aria-hidden="true">
+    <circle cx="48" cy="50" r="40" fill="var(--primary-soft)"/>
+    <path d="M24 32a8 8 0 0 1 8-8h32a8 8 0 0 1 8 8v24a8 8 0 0 1-8 8H45l-12 10V64h-1a8 8 0 0 1-8-8z" fill="var(--surface)" stroke="var(--border)" stroke-width="1.5"/>
+    <path d="M48 57V43" stroke="var(--primary)" stroke-width="3" stroke-linecap="round"/>
+    <path d="M48 44c0-7 4.6-11 12-11 0 7.4-4.6 11-12 11z" fill="var(--primary)"/>
+    <path d="M48 47c0-5.6-4-9-10-9 0 6 4 9 10 9z" fill="var(--accent)"/>
+  </svg>`;
+}
+const emptyHTML = (title, desc = '') => `<div class="card empty">${emptyArt()}<b>${title}</b>${desc}</div>`;
+
+// 회기 흐름: 상담일지를 상담일 순서로 한 줄에. 점 = 회기(채움: 결과 있음 / 빈 원: 결과 없음), 점 사이가 10일 이상 벌어지면 간격 표시.
+function flowHTML(clientId) {
+  const js = clientRecords(clientId).filter((r) => r.type === 'journal').slice().sort((a, b) => chronoOf(a) - chronoOf(b));
+  if (!js.length) return '';
+  const DAY = 864e5, md = (t) => { const d = new Date(t); return `${p2(d.getMonth() + 1)}.${p2(d.getDate())}`; };
+  let maxN = 0, prevT = null, html = '';
+  js.forEach((r, i) => {
+    const t = sessionOf(r), n = parseHeader(r.title || '').n || i + 1;
+    maxN = Math.max(maxN, n);
+    const b = batchState(r.id), st = b ? 'run' : r.result ? 'done' : 'todo';
+    if (i) {
+      const gap = t && prevT ? Math.round((t - prevT) / DAY) : null;
+      html += `<li class="fl-gap${gap >= 10 ? ' long' : ''}" aria-hidden="true">${gap >= 10 ? `<span>${gap}일</span>` : ''}</li>`;
+    }
+    prevT = t || prevT;
+    html += `<li class="fl-node ${st}"><a href="#/r/${r.id}" title="${esc(r.title)} · ${r.result ? '결과 있음' : '결과 없음'}">
+      <span class="fl-dot">${n}</span><span class="fl-date">${t ? md(t) : '날짜 없음'}</span></a></li>`;
+  });
+  html += `<li class="fl-gap next" aria-hidden="true"></li><li class="fl-node next"><a href="#/new/${clientId}/journal" title="${maxN + 1}회기 상담일지 쓰기">
+    <span class="fl-dot">${ic('plus', 14)}</span><span class="fl-date">${maxN + 1}회기</span></a></li>`;
+  const done = js.filter((r) => r.result).length;
+  const lastT = js.map(sessionOf).filter(Boolean).pop();
+  const ago = lastT ? Math.floor((Date.now() - lastT) / DAY) : null;
+  return `<section class="card flow" aria-label="회기 흐름">
+    <div class="flow-head">
+      <h3>회기 흐름</h3>
+      <span class="flow-meta">상담 ${js.length}회 · 결과 ${done}/${js.length}${ago !== null ? ` · 마지막 상담 ${ago <= 0 ? '오늘' : ago + '일 전'}` : ''}</span>
+    </div>
+    <ol class="flow-track">${html}</ol>
+    <div class="flow-legend"><span><i class="lg done"></i>결과 있음</span><span><i class="lg todo"></i>결과 없음</span></div>
+  </section>`;
 }
 
 // ---------- 기록 목록 ----------
@@ -731,7 +779,7 @@ function sortList(list) {
 function listInner() {
   const { showClient } = curList;
   const list = sortList(curList.list);
-  if (!list.length) return '<div class="card empty"><b>아직 기록이 없어요</b>오른쪽 위 [상담일지 쓰기]로 첫 기록을 만들어 보세요.</div>';
+  if (!list.length) return emptyHTML('아직 기록이 없어요', '오른쪽 위 [상담일지 쓰기]로 첫 기록을 만들어 보세요.');
   const ids = picked(), n = ids.size, all = n === list.length;
   return `
   <div class="list-bar${n ? ' active' : ''}">
@@ -1309,7 +1357,7 @@ async function viewFeedback() {
             <div class="fb-text">${esc(f.text)}</div>
           </div>
           <select data-fb="${f.id}" aria-label="처리 상태">${Object.entries(FB_STATUS).map(([k, v]) => `<option value="${k}" ${f.status === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
-        </div>`).join('')}</div>` : '<div class="card empty"><b>아직 받은 의견이 없어요</b>사용자가 상단 [농지에게 의견 보내기]로 보내면 여기에 쌓여요.</div>'}`;
+        </div>`).join('')}</div>` : emptyHTML('아직 받은 의견이 없어요', '사용자가 왼쪽 아래 [농지에게 의견 보내기]로 보내면 여기에 쌓여요.')}`;
     $('#fbRefresh').onclick = () => viewFeedback();
     main.querySelectorAll('[data-fb]').forEach((s) => {
       s.onchange = async () => {
@@ -1545,7 +1593,7 @@ function viewTrash() {
         </div>
       </div>`;
     }).join('')}</div>` : `
-    <div class="card empty"><b>휴지통이 비어 있어요</b>기록이나 내담자를 삭제하면 여기에 ${TRASH_DAYS}일 동안 보관돼요.</div>`}`;
+    ${emptyHTML('휴지통이 비어 있어요', `기록이나 내담자를 삭제하면 여기에 ${TRASH_DAYS}일 동안 보관돼요.`)}`}`;
 
   const byKey = (k) => rows.find((x) => trashKey(x) === k);
   const done = (msg) => { trashSel.clear(); viewTrash(); renderNav(); toast(msg); };
@@ -1778,7 +1826,7 @@ function renderBatch(full = false) {
       }
     }
   }
-  if (full) renderList();
+  if (full) { renderList(); const fw = $('#flowWrap'); if (fw) paint(fw, flowHTML(fw.dataset.client)); }   // 목록·회기 흐름에 '만드는 중' 반영
 }
 function openBatchModal() {
   if (!batch || $('#batchModal')) return;
