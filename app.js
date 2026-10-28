@@ -465,8 +465,8 @@ function viewClient(id) {
       <p class="client-meta" id="flowWrap" data-client="${id}">${flowHTML(id)}</p>
       </div>
       <div class="row">
-        <a class="btn h32 new-rec" href="#/new/${id}/journal">${ic('plus')}상담일지 쓰기</a>
-        <a class="btn soft h32" href="#/new/${id}/analysis">${ic('plus')}사례 분석 쓰기</a>
+        <a class="btn new-rec" href="#/new/${id}/journal">${ic('plus')}상담일지 쓰기</a>
+        <a class="btn soft" href="#/new/${id}/analysis">${ic('plus')}사례 분석 쓰기</a>
       </div>
     </div>
     <div class="stack">
@@ -561,7 +561,7 @@ function profileCardHTML(c) {
   if (!items.length && !details.length) return `
     <div class="card pf-card pf-empty">
       <div><h3>내담자 정보</h3><p class="sub" style="margin:0">생년월일·의뢰 경위처럼 계속 기억할 정보를 적어두면 AI가 함께 참고해요.</p></div>
-      <button class="btn soft h32" id="pfEdit">정보 입력</button>
+      <button class="btn soft" id="pfEdit">정보 입력</button>
     </div>`;
   return `
     <div class="card pf-card">
@@ -569,7 +569,7 @@ function profileCardHTML(c) {
         <button class="pf-toggle" id="pfToggle" aria-expanded="${open}" aria-controls="pfDetails">
           <svg class="pf-chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><h3>내담자 정보</h3>
         </button>
-        <button class="btn ghost h32" id="pfEdit">수정</button>
+        <button class="btn ghost" id="pfEdit">수정</button>
       </div>
       <div class="pf-meta">${items.length ? items.map((t) => `<span>${esc(t)}</span>`).join('<span class="pf-dot" aria-hidden="true">•</span>') : '<span class="pf-none">기본 정보 없음</span>'}</div>
       <div class="pf-details" id="pfDetails" ${open ? '' : 'hidden'}>
@@ -678,9 +678,9 @@ function openProfileModal(c) {
 function onboardHTML() {
   if (viewAs) return clients.length ? '' : '<div class="card empty"><b>아직 내담자가 없어요</b></div>';
   const steps = [
-    { done: !!profile.geminiKey, t: 'AI 이용 키 등록', d: '결과를 만들 때 필요해요. 무료이고 처음 한 번만 하면 돼요.', act: '<a class="btn h32" href="#/settings">키 등록하기</a>' },
-    { done: clients.length > 0, t: '내담자 추가', d: '이름 대신 "A-1"처럼 나만 알아볼 수 있는 별칭을 쓰세요.', act: '<button class="btn h32" id="obClient">내담자 추가</button>' },
-    { done: records.length > 0, t: '첫 상담일지 쓰기', d: '회기 내용을 적으면 AI가 상담일지 초안을 만들어 줘요.', act: clients.length ? `<a class="btn h32" href="#/new/${clients[0].id}/journal">상담일지 쓰기</a>` : '' },
+    { done: !!profile.geminiKey, t: 'AI 이용 키 등록', d: '결과를 만들 때 필요해요. 무료이고 처음 한 번만 하면 돼요.', act: '<a class="btn" href="#/settings">키 등록하기</a>' },
+    { done: clients.length > 0, t: '내담자 추가', d: '이름 대신 "A-1"처럼 나만 알아볼 수 있는 별칭을 쓰세요.', act: '<button class="btn" id="obClient">내담자 추가</button>' },
+    { done: records.length > 0, t: '첫 상담일지 쓰기', d: '회기 내용을 적으면 AI가 상담일지 초안을 만들어 줘요.', act: clients.length ? `<a class="btn" href="#/new/${clients[0].id}/journal">상담일지 쓰기</a>` : '' },
   ];
   if (steps.every((x) => x.done)) return '';
   const next = steps.findIndex((x) => !x.done);
@@ -768,9 +768,9 @@ function listInner() {
     ${!n ? `<label class="sort-wrap"><span class="sr-only">정렬</span><select id="listSort" class="sort-select">${Object.entries(SORTS).map(([k, t]) => `<option value="${k}" ${(prefs.listSort || 'recent') === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>` : ''}
     ${n ? `<div class="row bar-actions">
       <span class="bar-count" aria-live="polite"><b>${n}</b>건 선택</span>
-      <button class="btn h32" id="selGen">결과 만들기</button>
-      <button class="btn danger h32" id="selDel">삭제</button>
-      <button class="btn ghost h32" id="selCancel">취소</button>
+      <button class="btn" id="selGen">결과 만들기</button>
+      <button class="btn danger" id="selDel">삭제</button>
+      <button class="btn ghost" id="selCancel">취소</button>
     </div>` : ''}
   </div>
   <div class="list${n ? ' selecting' : ''}">${list.map((r) => {
@@ -1104,7 +1104,7 @@ function renderBulk(host, clientId, { text, onBack, onSaved, excludeId, autoGen 
       prog('저장하지 못했어요: ' + friendlyError(err));
     }
     busy = false;
-    box.querySelector('.bulk-actions').insertAdjacentHTML('beforeend', '<button class="btn" id="iDone">내담자 화면으로</button>');
+    box.querySelector('.bulk-actions').insertAdjacentHTML('beforeend', '<button class="btn solo" id="iDone">내담자 화면으로</button>');
     box.querySelector('#iStop')?.remove();
     box.querySelector('#iDone').onclick = () => { location.hash = '#/c/' + clientId; };
     await onSaved?.();
@@ -1210,7 +1210,7 @@ async function viewAdmin(uid) {
     };
     view.main = `
       <a class="back" href="#/admin">${ic('back', 14)}관리자</a>
-      <div class="page-head"><h2>${esc(email)}</h2><button class="btn ghost h32" id="adminRefresh">새로고침</button></div>
+      <div class="page-head"><h2>${esc(email)}</h2><button class="btn ghost" id="adminRefresh">새로고침</button></div>
       <p class="sub">읽기 전용 · 내담자 ${data.clients.length}명 · 기록 ${data.records.length}건</p>
       ${data.clients.map((c) => `
         <div class="card admin-client">
@@ -1324,7 +1324,7 @@ async function viewFeedback() {
   }
   const render = () => {
     view.main = `
-      <div class="page-head"><h2>관리자</h2><button class="btn ghost h32" id="fbRefresh">새로고침</button></div>
+      <div class="page-head"><h2>관리자</h2><button class="btn ghost" id="fbRefresh">새로고침</button></div>
       ${adminTabs('feedback')}
       <p class="sub">새 의견이 위에 보여요.</p>
       ${feedback.length ? `<div class="list">${feedback.slice().sort((a, b) => (a.status === 'new' ? 0 : 1) - (b.status === 'new' ? 0 : 1) || b.createdAt - a.createdAt).map((f) => `
@@ -1528,7 +1528,7 @@ function viewTrash() {
   view.main = `
     <div class="page-head" style="align-items:center">
       <h2>휴지통</h2>
-      ${all.length ? '<div class="row"><button class="btn ghost h32" id="tRestoreAll">모두 복구</button><button class="btn danger h32" id="tEmpty">휴지통 비우기</button></div>' : ''}
+      ${all.length ? '<div class="row"><button class="btn ghost" id="tRestoreAll">모두 복구</button><button class="btn danger" id="tEmpty">휴지통 비우기</button></div>' : ''}
     </div>
     <p class="sub">${TRASH_DAYS}일이 지나면 자동으로 영구 삭제돼요.</p>
     ${all.length ? `
@@ -1539,9 +1539,9 @@ function viewTrash() {
       </label>
       ${n ? `<div class="row bar-actions">
         <span class="bar-count" aria-live="polite"><b>${n}</b>건 선택</span>
-        <button class="btn h32" id="tRestore">복구</button>
-        <button class="btn danger h32" id="tPurge">영구 삭제</button>
-        <button class="btn ghost h32" id="tCancel">취소</button>
+        <button class="btn" id="tRestore">복구</button>
+        <button class="btn danger" id="tPurge">영구 삭제</button>
+        <button class="btn ghost" id="tCancel">취소</button>
       </div>` : names.length > 1 ? `<label class="sort-wrap"><span class="sr-only">내담자로 거르기</span><select id="tFilter" class="sort-select"><option value="">모든 내담자</option>${names.map(([id, nm]) => `<option value="${id}" ${id === trashFilter ? 'selected' : ''}>${esc(nm)}</option>`).join('')}</select></label>` : ''}
     </div>
     <div class="list">${rows.map((x) => {
@@ -1795,7 +1795,7 @@ function renderBatch(full = false) {
       const want = batch.done ? 'done' : 'run';
       if (acts.dataset.mode !== want) {
         acts.dataset.mode = want;
-        acts.innerHTML = batch.done ? '<button class="btn" id="bDone">닫기</button>'
+        acts.innerHTML = batch.done ? '<button class="btn solo" id="bDone">닫기</button>'
           : '<button class="btn ghost" id="bStop">중단</button><button class="btn" id="bHide">닫고 계속 만들기</button>';
         m.querySelector('#bStop')?.addEventListener('click', () => batch.ctrl.abort());
         m.querySelector('#bHide')?.addEventListener('click', closeBatchModal);
@@ -2035,9 +2035,9 @@ function renderReadView() {
         <div class="eyebrow">${TYPE[e.type]}</div>
       </div>
       <div class="row head-actions">
-        <button class="btn danger small" id="delBtn">삭제</button>
-        <button class="btn ghost h32" id="editBtn">수정</button>
-        <button class="btn h32" id="runBtn">${e.result ? SHORT[e.type] + ' 다시 생성' : TYPE[e.type] + ' 생성'}</button>
+        <button class="btn danger " id="delBtn">삭제</button>
+        <button class="btn ghost" id="editBtn">수정</button>
+        <button class="btn" id="runBtn">${e.result ? SHORT[e.type] + ' 다시 생성' : TYPE[e.type] + ' 생성'}</button>
       </div>
     </div>
 
@@ -2057,7 +2057,7 @@ function renderReadView() {
     <div class="card ${e.result ? '' : 'hidden'}" id="outCard" style="margin-top:18px">
       <div class="out-head">
         <h3>${TYPE[e.type]}</h3>
-        <div class="row"><button class="btn ghost small" id="copyBtn">복사</button></div>
+        <div class="row"><button class="btn ghost " id="copyBtn">복사</button></div>
       </div>
       <div class="status" id="status"></div>
       <div class="result" id="result"></div>
@@ -2093,9 +2093,9 @@ function renderEditForm() {
       </div>
       <div class="row head-actions">
         <span class="save-state" id="dirtyMark" aria-live="polite"></span>
-        ${e.id ? '<button class="btn ghost h32" id="cancelBtn">취소</button>' : ''}
-        <button class="btn h32" id="saveBtn" disabled>내용 저장</button>
-        <button class="btn h32" id="runBtn">${e.result ? SHORT[e.type] + ' 다시 생성' : TYPE[e.type] + ' 생성'}</button>
+        ${e.id ? '<button class="btn ghost" id="cancelBtn">취소</button>' : ''}
+        <button class="btn" id="saveBtn" disabled>내용 저장</button>
+        <button class="btn" id="runBtn">${e.result ? SHORT[e.type] + ' 다시 생성' : TYPE[e.type] + ' 생성'}</button>
       </div>
     </div>
 
@@ -2111,8 +2111,8 @@ function renderEditForm() {
       <div class="out-head">
         <h3>${TYPE[e.type]} 결과</h3>
         <div class="row">
-          <button class="btn ghost small" id="copyBtn">복사</button>
-          <button class="btn ghost small" id="editResultBtn">${e.editingResult ? '수정 완료' : '직접 수정'}</button>
+          <button class="btn ghost " id="copyBtn">복사</button>
+          <button class="btn ghost " id="editResultBtn">${e.editingResult ? '수정 완료' : '직접 수정'}</button>
         </div>
       </div>
       <div class="status" id="status"></div>
@@ -2561,14 +2561,14 @@ function viewSettings() {
           <div class="key-state" id="keyState"></div>
         </div>
         <div class="row">
-          <button class="btn small" id="saveKey">저장</button>
-          ${hasKey ? '<button class="btn ghost small" id="cancelKey">취소</button>' : ''}
+          <button class="btn " id="saveKey">저장</button>
+          ${hasKey ? '<button class="btn ghost " id="cancelKey">취소</button>' : ''}
         </div>` : `
         <div class="key-row">
           <div><div class="key-ok">${ic('check', 14)}등록됨</div><code class="key-mask">${esc(maskKey(profile.geminiKey))}</code></div>
           <div class="row">
-            <button class="btn ghost small" id="editKey">키 변경</button>
-            <button class="btn danger small" id="removeKey">키 삭제</button>
+            <button class="btn ghost " id="editKey">키 변경</button>
+            <button class="btn danger " id="removeKey">키 삭제</button>
           </div>
         </div>`}
       </div>
@@ -2576,8 +2576,8 @@ function viewSettings() {
         <h3>기록 내보내기</h3>
         <p class="sub">내담자와 기록 전체를 파일로 받아요. 가끔 받아두면 실수로 지워도 안심이에요.</p>
         <div class="row">
-          <button class="btn small" id="exportTxt">읽기용 파일(.txt) 받기</button>
-          <button class="btn ghost small" id="exportJson">백업용 파일(.json) 받기</button>
+          <button class="btn " id="exportTxt">읽기용 파일(.txt) 받기</button>
+          <button class="btn ghost " id="exportJson">백업용 파일(.json) 받기</button>
         </div>
       </div>
       <div class="card">
