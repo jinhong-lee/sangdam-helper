@@ -557,7 +557,7 @@ function profileText(c) {
 
 function profileCardHTML(c) {
   const items = summaryItems(c), details = detailFields(c);
-  const open = !!prefs.profileOpen || !items.length;   // 기본 정보가 없으면 상세(예전 메모 등)를 펼쳐서 보여줌
+  const open = false;   // 항상 접힌 채로 시작 (펼침은 그 화면에서만 유지, 다른 내담자로 옮기지 않음)
   if (!items.length && !details.length) return `
     <div class="card pf-card pf-empty">
       <div><h3>내담자 정보</h3><p class="sub" style="margin:0">생년월일·의뢰 경위처럼 계속 기억할 정보를 적어두면 AI가 함께 참고해요.</p></div>
@@ -571,7 +571,7 @@ function profileCardHTML(c) {
         </button>
         <button class="btn ghost" id="pfEdit">수정</button>
       </div>
-      <div class="pf-meta">${items.length ? items.map((t) => `<span>${esc(t)}</span>`).join('<span class="pf-dot" aria-hidden="true">•</span>') : '<span class="pf-none">기본 정보 없음</span>'}</div>
+      <div class="pf-meta">${items.length ? items.map((t) => `<span>${esc(t)}</span>`).join('<span class="pf-dot" aria-hidden="true">•</span>') : `<span class="pf-none">기본 정보 없음</span>${details.length ? `<span class="pf-dot" aria-hidden="true">•</span><span>${details.map((f) => f.label).join(', ')} 적혀 있음</span>` : ''}`}</div>
       <div class="pf-details" id="pfDetails" ${open ? '' : 'hidden'}>
         ${details.length ? details.map((f) => `<div class="pf-row"><div class="pf-label">${f.label}</div><div class="pf-value">${esc(fieldText(c, f))}</div></div>`).join('') : '<p class="sub" style="margin:0">상담 배경 정보가 아직 없어요.</p>'}
       </div>
@@ -580,7 +580,6 @@ function profileCardHTML(c) {
 function bindProfileCard(c) {
   on('#pfToggle', 'click', () => {
     const next = $('#pfToggle').getAttribute('aria-expanded') !== 'true';
-    prefs.profileOpen = next; savePrefs(prefs);
     $('#pfToggle').setAttribute('aria-expanded', next); $('#pfDetails').hidden = !next;
   });
   on('#pfEdit', 'click', () => openProfileModal(c));
