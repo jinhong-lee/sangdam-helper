@@ -13,6 +13,11 @@ const TYPE = { analysis: '사례 분석', journal: '상담일지' };
 // 관리자: 모든 사용자의 기록을 읽기 전용으로 볼 수 있음 (firestore.rules의 isAdmin과 같은 목록이어야 함)
 const ADMINS = ['leejjinhong@gmail.com'];
 const isAdminUser = () => !!user && ADMINS.includes(user.email);
+// 라인 아이콘 (헤더 버튼·쓰레기통)
+const LINE_ICON = {
+  trash: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
+};
+const SHORT_TYPE = { journal: '일지', analysis: '분석' };   // 메뉴·목록의 종류 표시 (같은 말로 통일)
 const SHORT = { analysis: '사례', journal: '일지' }; // 다시 생성 버튼용 짧은 이름
 const HISTORY_COUNT = 3;
 const TRASH_DAYS = 30;   // 쓰레기통 보관 기간. 지난 것은 앱을 열 때 영구 삭제 (서버 기능 없이 처리 → 추가 비용 없음)
@@ -202,6 +207,8 @@ async function askUnsaved(actionLabel) {
 $('#logoutBtn').onclick = async () => {
   exitViewAs();
   if (!(await askUnsaved('로그아웃'))) return;
+  if (batch && !batch.done && !(await confirmModal({ title: '결과를 만드는 중이에요', message: '로그아웃하면 아직 못 만든 기록은 멈춰요. 이미 만든 결과는 저장돼 있어요.', okLabel: '멈추고 로그아웃', cancelLabel: '계속 만들기' }))) return;
+  batch?.ctrl.abort(); $('#batchModal')?.remove(); batch = null; renderBatch();
   running?.abort();
   await signOut(auth);
   location.hash = '';
@@ -286,12 +293,12 @@ function renderNav() {
         </div>
         ${open ? `<div class="tree-kids">${recs.map((r) => `
           <a href="#/r/${r.id}" class="kid ${r.id === curRecord ? 'on' : ''}">
-            <span class="ktag ${r.type}">${r.type === 'journal' ? '일지' : '분석'}</span><span class="kt" data-tip>${hl(r.title || '', q)}</span>
+            <span class="ktype">${SHORT_TYPE[r.type]}</span><span class="kt" data-tip>${hl(r.title || '', q)}</span>
           </a>`).join('') || '<span class="kid-empty">아직 기록이 없습니다</span>'}</div>` : ''}
       </div>`;
     }).join('')}
     ${q && !groups.length ? '<div class="nav-empty">검색 결과가 없습니다</div>' : ''}
-    ${!q && !viewAs ? `<a href="#/trash" class="nav-trash ${page === 'trash' ? 'on' : ''}"><span>쓰레기통</span> <span class="cnt">${trashRows().length}</span></a>` : ''}
+    ${!q && !viewAs ? `<a href="#/trash" class="nav-trash ${page === 'trash' ? 'on' : ''}"><span class="nav-ic">${LINE_ICON.trash}쓰레기통</span> <span class="cnt">${trashRows().length}</span></a>` : ''}
 `;
   $('#nav').querySelectorAll('[data-tw]').forEach((b) => {
     b.onclick = () => { navToggled.set(b.dataset.tw, b.getAttribute('aria-expanded') !== 'true'); renderNav(); };
@@ -702,9 +709,9 @@ function listInner() {
         <div class="item-title">
           <span class="it-name">${esc(r.title)}</span>
           <span class="it-date" title="${esc(recDate(r))}">${shortDay(r.createdAt || r.writtenAt || r.updatedAt)}</span>
-          <span class="it-state ${r.result ? 'done' : ''}">${r.result ? '결과 있음' : '결과 없음'}</span>
+          ${(() => { const b = batchState(r.id); return b ? `<span class="it-state ${b}">${b === 'run' ? '결과 만드는 중' : '결과 대기'}</span>` : `<span class="it-state ${r.result ? 'done' : ''}">${r.result ? '결과 있음' : '결과 없음'}</span>`; })()}
         </div>
-        <div class="item-line">${showClient ? `<b>${esc(clientName(r.clientId))}</b>` : `<b>${TYPE[r.type]}</b>`}<span class="it-preview">${esc(plain(r.result || recordText(r)).slice(0, 200))}</span></div>
+        <div class="item-line">${showClient ? `<b>${esc(clientName(r.clientId))}</b>` : `<b>${SHORT_TYPE[r.type]}</b>`}<span class="it-preview">${esc(plain(r.result || recordText(r)).slice(0, 200))}</span></div>
       </div>
       <div class="more">
         <button class="more-btn" data-more aria-haspopup="menu" aria-expanded="false" aria-label="기록 메뉴">⋯</button>
@@ -870,12 +877,12 @@ async function splitByAI(text, signal) {
     return { title: sessionTitle(x.session, ts, !!x.time), content: String(x.content || '').trim() };
   }).filter((s) => s.content);
 }
-async function generateText(prompt, signal) {
+async function generateText(prompt, signal, onText = () => {}) {
   if (!models) models = await findModels(profile.geminiKey);
   let lastErr;
   for (const model of models.slice(0, 4)) {
     try {
-      const r = await generate(model, prompt, signal, () => {});
+      const r = await generate(model, prompt, signal, onText);
       if (!r.text) throw new Error('빈 답변이 돌아왔습니다');
       return r.text;
     } catch (err) {
@@ -1113,7 +1120,7 @@ async function viewAdmin(uid) {
     const recHTML = (r) => {
       const inputs = Object.entries(r.inputs || {}).filter(([, v]) => (v || '').trim());
       return `<details class="admin-rec">
-        <summary><span class="ktag ${r.type}">${r.type === 'journal' ? '일지' : '분석'}</span><b>${esc(r.title || '')}</b>
+        <summary><span class="ktype">${SHORT_TYPE[r.type]}</span><b>${esc(r.title || '')}</b>
           <span class="sub" style="margin:0">${recDate(r)} · ${MODES[r.mode] || '방식 기록 없음'}${r.result ? '' : ' · 결과 없음'}</span></summary>
         <div class="admin-rec-body">
           <h4>입력한 내용</h4>
@@ -1507,6 +1514,7 @@ function viewTrash() {
 // ---------- 고른 기록 결과 한꺼번에 만들기 ----------
 function openBatchRun(list) {
   if (!list.length) return;
+  if (batch && !batch.done) { toast('지금 결과를 만드는 중이에요. 끝난 뒤에 다시 시도해 주세요'); openBatchModal(); return; }
   if (!profile.geminiKey) { toast('먼저 설정에서 AI 이용 키를 등록해 주세요'); location.hash = '#/settings'; return; }
   const opener = document.activeElement;
   const had = list.filter((r) => r.result).length;
@@ -1552,7 +1560,7 @@ function openBatchRun(list) {
     goBtn.disabled = !n;
     goBtn.textContent = n ? `${n}건 만들기` : '만들 기록이 없어요';
     back.querySelector('#bEta').textContent = n
-      ? `약 ${Math.max(1, Math.ceil(n / 2))}~${n}분 걸려요. 오래된 기록부터 하나씩 만들고, 다 된 건은 바로 저장돼요. 창을 닫으면 멈춰요.`
+      ? `약 ${Math.max(1, Math.ceil(n / 2))}~${n}분 걸려요. 오래된 기록부터 하나씩 만들고, 다 된 건은 바로 저장돼요. 만드는 동안 창을 닫고 다른 일을 해도 돼요. 다 되면 알려드려요.`
       : '';
   };
   let busy = false;
@@ -1568,54 +1576,178 @@ function openBatchRun(list) {
   back.querySelector('[data-all]').onclick = () => boxes().forEach((b) => (b.checked = true));
   back.querySelector('[data-none]').onclick = () => boxes().forEach((b) => (b.checked = false));
   back.querySelector('[data-cancel]').onclick = close;
-  goBtn.onclick = async () => {
+  goBtn.onclick = () => {
     const lenses = boxes().filter((b) => b.checked).map((b) => b.value);
     const useHistory = back.querySelector('#bHistory').checked;
     const todo = targets().slice().sort((a, b) => a.createdAt - b.createdAt);   // 오래된 기록부터 → 뒤 기록이 앞 기록 결과를 참고
-    busy = true;
-    const ctrl = new AbortController(); batchRun = ctrl;
-    back.querySelector('#bBody').innerHTML = `
-      <h3 id="bTitle">결과 만드는 중</h3>
-      <p class="sub" id="bProg" aria-live="polite"></p>
-      <div class="imp-list">${todo.map((r, i) => `
-        <div class="imp-row batch-row"><div class="imp-main"><b>${esc(r.title)}</b><span class="sub" style="margin:0">${esc(clientName(r.clientId))} · ${fmtDay(r.createdAt)}</span></div><span class="imp-status" data-st="${i}">대기</span></div>`).join('')}</div>`;
-    back.querySelector('#bActions').innerHTML = '<button class="btn ghost" id="bStop">중단</button>';
-    back.querySelector('#bStop').onclick = () => ctrl.abort();
-    const prog = (t) => { back.querySelector('#bProg').textContent = t; };
-    let ok = 0;
-    for (const [i, r] of todo.entries()) {
-      if (ctrl.signal.aborted) break;
-      const st = back.querySelector(`[data-st="${i}"]`);
-      st.innerHTML = '<span class="spinner"></span>'; prog(`${i + 1}/${todo.length}번째 만드는 중… 창을 닫지 마세요`);
-      const job = { ...r, inputs: normInputs(r.type, r.inputs), mode: inferMode(r), lenses, useHistory };
-      let tries = 0;
-      for (;;) {
-        try {
-          const text = await generateText(buildPrompt(job), ctrl.signal);
-          const patch = { result: text, lenses, useHistory, updatedAt: Date.now() };
-          await updateDoc(userDoc('records', r.id), patch);
-          Object.assign(records.find((x) => x.id === r.id) || {}, patch);
-          st.textContent = '✓ 완료'; ok++;
-          break;
-        } catch (err) {
-          if (err.name === 'AbortError') { st.textContent = '중단'; break; }
-          if (err.status === 429 && tries++ < 2) { prog('무료 사용량 제한으로 30초 기다렸다가 이어서 만들어요…'); await new Promise((res) => setTimeout(res, 30000)); continue; }
-          st.textContent = '실패'; st.title = friendlyError(err);
-          break;
-        }
-      }
-    }
     prefs.lenses_journal = lenses; savePrefs(prefs);
-    batchRun = null; busy = false;
-    const fail = todo.length - ok;
-    prog(`${ok}건을 만들었어요.` + (fail ? ` ${fail}건은 만들지 못했어요. 다시 골라서 만들거나, 기록을 열어 [생성]을 눌러주세요.` : ''));
-    back.querySelector('#bActions').innerHTML = '<button class="btn" id="bDone">닫기</button>';
-    back.querySelector('#bDone').onclick = () => { close(); route(); };
-    back.querySelector('#bDone').focus();
+    close();
+    sel = null; renderList();
+    startBatch(todo, lenses, useHistory);
+    openBatchModal();
   };
   sync();
   goBtn.focus();
 }
+
+// ---------- 결과 만들기: 뒤에서 진행 ----------
+// 진행 창을 닫아도 계속 만듦(이 탭 안에서). 오른쪽 아래 진행 버튼으로 다시 열 수 있고, 다 되면 알림.
+// 진행률: 결과 글자 수 ÷ 같은 종류 기존 결과의 보통 길이(중앙값)로 추정 — 첫 글자가 오기 전(AI가 생각하는 동안)은 시간에 따라 15%까지 천천히.
+let batch = null;
+const BATCH_LABEL = { wait: '대기', run: '만드는 중', done: '완료', fail: '실패', stop: '중단', skip: '건너뜀' };
+function donutSVG(p, st, size = 22) {
+  const r = 9, c = 2 * Math.PI * r;
+  const ring = `<circle cx="12" cy="12" r="${r}" fill="none" stroke="var(--border)" stroke-width="3"/>`;
+  let inner;
+  if (st === 'done') inner = `<circle cx="12" cy="12" r="10.5" fill="var(--primary)"/><path d="m7.5 12.3 3 3 6-6.3" fill="none" stroke="var(--on-primary)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`;
+  else if (st === 'fail') inner = `<circle cx="12" cy="12" r="10.5" fill="var(--error)"/><path d="M12 7v6M12 16.6v.1" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>`;
+  else if (st === 'stop' || st === 'skip') inner = `${ring}<path d="M8.5 12h7" stroke="var(--text-2)" stroke-width="2.2" stroke-linecap="round"/>`;
+  else if (st === 'run') p = Math.max(p, 0.04);   // 막 시작해도 움직임이 보이게
+  if (!['done', 'fail', 'stop', 'skip'].includes(st)) inner = ring + (p > 0 ? `<circle cx="12" cy="12" r="${r}" fill="none" stroke="var(--primary)" stroke-width="3" stroke-linecap="round" stroke-dasharray="${(c * Math.min(p, 1)).toFixed(2)} ${c.toFixed(2)}" transform="rotate(-90 12 12)"/>` : '');
+  return `<svg class="donut" viewBox="0 0 24 24" width="${size}" height="${size}" role="img" aria-label="${st === 'run' ? Math.round(p * 100) + '%' : BATCH_LABEL[st] || ''}">${inner}</svg>`;
+}
+function typicalLen(type) {
+  const ls = records.filter((x) => x.type === type && x.result).map((x) => x.result.length).sort((a, b) => a - b);
+  return ls.length ? Math.max(1500, ls[Math.floor(ls.length / 2)]) : 3000;
+}
+const batchCount = () => {
+  const it = batch?.items || [];
+  return { total: it.length, ok: it.filter((x) => x.st === 'done').length, fail: it.filter((x) => x.st === 'fail').length, fin: it.filter((x) => !['wait', 'run'].includes(x.st)).length };
+};
+const batchOverall = () => { const it = batch.items; return it.reduce((a, x) => a + (x.st === 'run' ? x.p : x.st === 'wait' ? 0 : 1), 0) / it.length; };
+// 목록 카드의 상태 표시용: 대기·만드는 중
+function batchState(id) { const x = batch && !batch.done && batch.items.find((i) => i.r.id === id); return x && (x.st === 'wait' || x.st === 'run') ? x.st : null; }
+
+function startBatch(todo, lenses, useHistory) {
+  const ctrl = new AbortController();
+  batch = { items: todo.map((r) => ({ r, st: 'wait', p: 0, err: '', before: r.result || '' })), ctrl, done: false, seen: false };
+  batchRun = ctrl;
+  renderBatch(true);
+  (async () => {
+    for (const x of batch.items) {
+      if (ctrl.signal.aborted) { x.st = 'stop'; continue; }
+      const cur = records.find((y) => y.id === x.r.id);
+      if (!cur || cur.deletedAt) { x.st = 'skip'; x.err = '삭제된 기록'; renderBatch(true); continue; }
+      if ((cur.result || '') !== x.before) { x.st = 'skip'; x.err = '그사이 직접 만든 결과가 있어요'; renderBatch(true); continue; }
+      x.st = 'run'; x.p = 0; renderBatch(true);
+      const t0 = Date.now(), expect = typicalLen(cur.type);
+      let got = 0;
+      const tick = setInterval(() => { if (!got) { x.p = 0.15 * (1 - Math.exp(-(Date.now() - t0) / 8000)); renderBatch(); } }, 400);
+      const job = { ...cur, inputs: normInputs(cur.type, cur.inputs), mode: inferMode(cur), lenses, useHistory };
+      let tries = 0;
+      for (;;) {
+        try {
+          const text = await generateText(buildPrompt(job), ctrl.signal, (t) => { got = t.length; x.p = 0.15 + 0.8 * Math.min(1, got / expect); renderBatch(); });
+          const patch = { result: text, lenses, useHistory, updatedAt: Date.now() };
+          await updateDoc(userDoc('records', cur.id), patch);
+          Object.assign(cur, patch);
+          // 이 기록을 열어 둔 상태면 화면에도 반영 (결과를 직접 고치는 중이면 건드리지 않음)
+          if (editor?.id === cur.id && !editor.editingResult) {
+            editor.result = text; editor.lenses = lenses; editor.useHistory = useHistory;
+            if (!editor.dirty) renderEditor();
+          }
+          x.st = 'done'; x.p = 1;
+          break;
+        } catch (err) {
+          if (err.name === 'AbortError') { x.st = 'stop'; break; }
+          if (err.status === 429 && tries++ < 2) { x.err = '무료 사용량 제한으로 30초 기다리는 중'; renderBatch(); await new Promise((res) => setTimeout(res, 30000)); x.err = ''; continue; }
+          x.st = 'fail'; x.err = friendlyError(err);
+          break;
+        }
+      }
+      clearInterval(tick);
+      renderBatch(true);
+    }
+    batch.done = true; batchRun = null;
+    renderBatch(true);
+    const { ok, fail } = batchCount();
+    const stopped = ctrl.signal.aborted;
+    if (!$('#batchModal')) {
+      toastAction(stopped ? `결과 만들기를 멈췄어요 · ${ok}건 완료` : `결과 ${ok}건을 다 만들었어요` + (fail ? ` · ${fail}건 실패` : ''), '자세히', openBatchModal);
+    } else batch.seen = true;
+    if (document.hidden) document.title = '✓ 결과 완료 · 농지니';
+  })();
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && batch?.done) document.title = '농지니'; });
+
+// 상태가 바뀌면(full) 목록·진행 창·버튼 모두, 진행률만 바뀌면 도넛만 갱신
+function renderBatch(full = false) {
+  if (!batch) { $('#batchDock').hidden = true; document.title = '농지니'; return; }
+  const { total, ok, fail, fin } = batchCount();
+  const pAll = batchOverall();
+  if (!batch.done) document.title = `(${fin}/${total}) 농지니`;
+  else if (!document.hidden) document.title = '농지니';
+  // 오른쪽 아래 진행 버튼
+  const dock = $('#batchDock');
+  dock.hidden = false;
+  dock.classList.toggle('done', batch.done);
+  $('#batchDockOpen').innerHTML = `${donutSVG(pAll, batch.done ? (fail && !ok ? 'fail' : 'done') : 'run', 26)}
+    <span class="bd-text"><b>${batch.done ? (batch.ctrl.signal.aborted ? '결과 만들기 멈춤' : '결과 만들기 완료') : '결과 만드는 중'}</b>
+    <span>${batch.done ? `${ok}건 완료${fail ? ` · ${fail}건 실패` : ''}` : `${fin}/${total}건 · ${Math.round(pAll * 100)}%`}</span></span>`;
+  $('#batchDockClose').hidden = !batch.done;
+  // 진행 창
+  const m = $('#batchModal');
+  if (m) {
+    batch.items.forEach((x, i) => {
+      const row = m.querySelector(`[data-st="${i}"]`); if (!row) return;
+      row.querySelector('.bs-donut').innerHTML = donutSVG(x.p, x.st);
+      row.querySelector('.bs-label').textContent = x.st === 'run' ? `${Math.round(x.p * 100)}%` : BATCH_LABEL[x.st];
+      row.dataset.state = x.st;
+      const note = row.querySelector('.bs-note'); note.textContent = x.err; note.hidden = !x.err;
+    });
+    m.querySelector('#bProg').textContent = batch.done
+      ? `${ok}건을 만들었어요.` + (fail ? ` ${fail}건은 만들지 못했어요. 다시 골라서 만들거나, 기록을 열어 [생성]을 눌러주세요.` : '')
+      : `${fin}/${total}건 완료 · 창을 닫아도 뒤에서 계속 만들어요. 다 되면 알려드려요. (브라우저 탭을 닫으면 멈춰요)`;
+    if (full) {
+      const acts = m.querySelector('#bActions');
+      const want = batch.done ? 'done' : 'run';
+      if (acts.dataset.mode !== want) {
+        acts.dataset.mode = want;
+        acts.innerHTML = batch.done ? '<button class="btn" id="bDone">닫기</button>'
+          : '<button class="btn ghost" id="bStop">중단</button><button class="btn" id="bHide">닫고 계속 만들기</button>';
+        m.querySelector('#bStop')?.addEventListener('click', () => batch.ctrl.abort());
+        m.querySelector('#bHide')?.addEventListener('click', closeBatchModal);
+        m.querySelector('#bDone')?.addEventListener('click', closeBatchModal);
+        if (batch.done) m.querySelector('#bDone').focus();
+      }
+    }
+  }
+  if (full) renderList();
+}
+function openBatchModal() {
+  if (!batch || $('#batchModal')) return;
+  if (batch.done) batch.seen = true;
+  const opener = document.activeElement;
+  const back = document.createElement('div');
+  back.className = 'modal-back'; back.id = 'batchModal';
+  back.innerHTML = `
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="bTitle">
+      <div class="modal-body">
+        <div class="bm-head"><h3 id="bTitle">결과 만들기</h3>
+          <button class="pf-close" data-x aria-label="닫기"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+        <p class="sub" id="bProg" aria-live="polite"></p>
+        <div class="imp-list">${batch.items.map((x, i) => `
+          <div class="imp-row batch-row" data-st="${i}"><div class="imp-main"><b>${esc(x.r.title)}</b><span class="sub" style="margin:0">${esc(clientName(x.r.clientId))} · ${fmtDay(x.r.createdAt)}</span><span class="bs-note" hidden></span></div>
+            <span class="bs-status"><span class="bs-label"></span><span class="bs-donut"></span></span></div>`).join('')}</div>
+      </div>
+      <div class="modal-actions" id="bActions"></div>
+    </div>`;
+  document.body.appendChild(back);
+  back._opener = opener;
+  back.onclick = (ev) => { if (ev.target === back) closeBatchModal(); };
+  back.querySelector('[data-x]').onclick = closeBatchModal;
+  renderBatch(true);
+  (back.querySelector('#bHide') || back.querySelector('#bDone'))?.focus();
+}
+function closeBatchModal() {
+  const m = $('#batchModal'); if (!m) return;
+  m.remove(); m._opener?.focus?.();
+  if (batch?.done) { dismissBatch(); route(); }
+}
+function dismissBatch() { batch = null; renderBatch(); }
+document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && $('#batchModal') && !document.querySelector('[role=alertdialog]')) closeBatchModal(); });
+$('#batchDockOpen').onclick = openBatchModal;
+$('#batchDockClose').onclick = dismissBatch;
 
 // ---------- 작성 · 수정 화면 ----------
 function nowStamp() { return fmtDate(Date.now()); }
@@ -1819,22 +1951,23 @@ function renderReadView() {
     <h2 class="read-title">${esc(e.title)}</h2>
     <p class="read-meta">${recDate(records.find((r) => r.id === e.id) || e)}</p>
 
-    <div class="card ${e.result ? '' : 'hidden'}" id="outCard">
-      <div class="out-head">
-        <h3>${TYPE[e.type]}</h3>
-        <div class="row"><button class="btn small" id="copyBtn">복사</button></div>
-      </div>
-      <div class="status" id="status"></div>
-      <div class="result" id="result"></div>
-    </div>
-
-    <div class="card read-inputs" style="margin-top:${e.result ? 18 : 0}px">
+    <div class="card read-inputs">
       <div class="out-head"><h3>입력한 내용</h3><span class="sub" style="margin:0">${MODES[e.mode] || ''}</span></div>
       ${fields.length ? fields.map((f) => `
         <div class="read-field">
           ${e.mode === 'sentence' ? '' : `<div class="read-label">${esc(f.label)}</div>`}
           <div class="read-value">${esc(e.inputs[f.label])}</div>
         </div>`).join('') : '<p class="sub" style="margin:0">입력한 내용이 없습니다.</p>'}
+    </div>
+
+    <!-- 만든 결과는 입력한 내용 아래 (입력 → 결과 순서로 읽힘) -->
+    <div class="card ${e.result ? '' : 'hidden'}" id="outCard" style="margin-top:18px">
+      <div class="out-head">
+        <h3>${TYPE[e.type]}</h3>
+        <div class="row"><button class="btn small" id="copyBtn">복사</button></div>
+      </div>
+      <div class="status" id="status"></div>
+      <div class="result" id="result"></div>
     </div>`;
   e.editingResult = false;
   renderResult();

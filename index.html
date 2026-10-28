@@ -128,9 +128,6 @@
   .nav a.kid { justify-content: flex-start; gap: 6px; padding: 6px 8px; font-size: 13px; color: var(--text-2); }
   .nav a.kid.on { color: var(--primary); }
   .nav .kt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ktag { flex-shrink: 0; font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 999px; }
-  .ktag.analysis { background: var(--accent-soft); color: var(--accent); }
-  .ktag.journal { background: var(--primary-soft); color: var(--primary); }
   .kid-empty { font-size: 12.5px; color: var(--text-2); padding: 6px 8px; }
   @media (max-width: 860px) {
     .nav { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
@@ -446,6 +443,37 @@
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   .toast.act { pointer-events: auto; display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 18px; }
   .toast-btn { border: 0; background: transparent; color: var(--bg); font: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; padding: 4px 10px; border-radius: 999px; }
+  /* 헤더·메뉴 라인 아이콘 */
+  .hd-ic { flex-shrink: 0; margin-left: -2px; }
+  .nav-ic { display: inline-flex; align-items: center; gap: 6px; }
+  /* 메뉴의 기록 종류: 목록과 같은 텍스트 표시 */
+  .ktype { flex-shrink: 0; font-size: 12px; font-weight: 600; color: var(--text-2); }
+  /* 결과 만들기: 진행 도넛 · 오른쪽 아래 진행 버튼 */
+  .donut { display: block; flex-shrink: 0; }
+  .donut circle { transition: stroke-dasharray .35s ease; }
+  .bs-status { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; font-size: 12.5px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+  .bs-label { min-width: 34px; text-align: right; }
+  .batch-row[data-state="run"] .bs-label { color: var(--primary); font-weight: 700; }
+  .batch-row[data-state="fail"] .bs-label { color: var(--error); font-weight: 700; }
+  .batch-row { align-items: center; }
+  .bs-note { font-size: 12px; color: var(--text-2); }
+  .batch-row[data-state="fail"] .bs-note { color: var(--error); }
+  .bm-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: -6px -8px 0 0; }
+  .bm-head h3 { margin: 0; }
+  .batch-dock { position: fixed; right: 20px; bottom: 20px; z-index: 15; display: flex; align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 8px 28px rgba(0,0,0,.14); }
+  .batch-dock[hidden] { display: none; }
+  .bd-open { display: flex; align-items: center; gap: 10px; padding: 10px 16px 10px 12px; border: 0; background: none; font: inherit; color: var(--text); cursor: pointer; text-align: left; border-radius: 14px; }
+  .bd-open:hover { background: var(--surface-2); }
+  .bd-text { display: grid; line-height: 1.3; }
+  .bd-text b { font-size: 13.5px; }
+  .bd-text span { font-size: 12px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+  .bd-close { width: 32px; height: 32px; margin-right: 8px; display: grid; place-items: center; border: 0; border-radius: 8px; background: none; color: var(--text-2); cursor: pointer; }
+  .bd-close:hover { background: var(--surface-2); color: var(--text); }
+  .batch-dock.done { border-color: var(--primary); }
+  @media (max-width: 560px) { .batch-dock { right: 12px; left: 12px; bottom: 12px; } .bd-open { flex: 1; } }
+  @media (max-width: 560px) { body:has(.batch-dock:not([hidden])) .toast { bottom: 84px; } }
+  .it-state.run { background: var(--primary); color: var(--on-primary); }
+  .it-state.wait { background: var(--surface-2); color: var(--text-2); }
 </style>
 </head>
 <body>
@@ -479,10 +507,10 @@
       <a class="logo" href="#/"><img src="favicon.svg" alt="" width="28" height="28">농지니</a>
       <span class="viewas-badge" id="viewasBadge" hidden>👀 <b id="viewasName"></b> 화면 보는 중 · 읽기 전용 <button class="btn h32" id="viewasExit">나가기</button></span>
       <span class="user-mail" id="userMail"></span>
-      <button class="btn ghost small" id="fbBtn"><span class="fb-long">농지에게 </span>의견 보내기</button>
+      <button class="btn ghost small" id="fbBtn"><svg class="hd-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-5A8 8 0 1 1 21 12z"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01"/></svg><span class="fb-long">농지에게 </span>의견 보내기</button>
       <a class="btn ghost small" href="#/admin" id="adminLink" hidden>관리자<span class="fb-badge" id="fbBadge" hidden></span></a>
-      <a class="btn ghost small" href="#/settings">설정</a>
-      <button class="btn ghost small" id="logoutBtn">로그아웃</button>
+      <a class="btn ghost small" href="#/settings"><svg class="hd-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>설정</a>
+      <button class="btn ghost small" id="logoutBtn"><svg class="hd-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>로그아웃</button>
     </div>
   </header>
   <div class="layout">
@@ -499,6 +527,10 @@
   </div>
 </div>
 
+<div class="batch-dock" id="batchDock" hidden>
+  <button class="bd-open" id="batchDockOpen" aria-label="결과 만들기 진행 상황 보기"></button>
+  <button class="bd-close" id="batchDockClose" aria-label="알림 닫기" hidden><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+</div>
 <div class="toast" id="toast"></div>
 <script type="module" src="app.js"></script>
 </body>
