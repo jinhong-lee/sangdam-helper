@@ -13,7 +13,17 @@ const TYPE = { analysis: '사례 분석', journal: '상담일지' };
 // 관리자: 모든 사용자의 기록을 읽기 전용으로 볼 수 있음 (firestore.rules의 isAdmin과 같은 목록이어야 함)
 const ADMINS = ['leejjinhong@gmail.com'];
 const isAdminUser = () => !!user && ADMINS.includes(user.email);
-// 라인 아이콘 (헤더 버튼·휴지통)
+// 선 아이콘 한 세트 (Lucide 계열, 선 굵기 1.8 통일) — 글자 기호(▸ ⋯ ← + ✓ 이모지) 대신 사용
+const IC_PATH = {
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  chevR: '<path d="m9 6 6 6-6 6"/>',
+  more: '<circle cx="5" cy="12" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/><circle cx="19" cy="12" r="1.2" fill="currentColor"/>',
+  back: '<path d="M19 12H5M11 6l-6 6 6 6"/>',
+  check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  eye: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  ext: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+};
+const ic = (name, size = 16, cls = 'ic') => `<svg class="${cls}" viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC_PATH[name]}</svg>`;
 const LINE_ICON = {
   trash: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
 };
@@ -106,7 +116,7 @@ const clientRecords = (id) => records.filter((r) => r.clientId === id);
 // ---------- 시작 ----------
 async function boot() {
   if (!firebaseConfig.apiKey) {
-    $('#bootView').innerHTML = '<div class="card" style="max-width:480px">아직 로그인 서비스가 연결되지 않았습니다. 관리자에게 Firebase 설정을 요청해 주세요.</div>';
+    $('#bootView').innerHTML = '<div class="card" style="max-width:480px">아직 로그인 서비스가 연결되지 않았어요. 관리자에게 알려주세요.</div>';
     return;
   }
   try {
@@ -118,7 +128,7 @@ async function boot() {
       docs[d.id] = (await res.text()).trim();
     }));
   } catch (e) {
-    $('#bootView').innerHTML = `<div class="error-box">자료를 불러오지 못했습니다. 새로고침해 주세요. (${esc(e.message)})</div>`;
+    $('#bootView').innerHTML = `<div class="error-box">자료를 불러오지 못했어요. 새로고침해 주세요. (${esc(e.message)})</div>`;
     return;
   }
 
@@ -133,7 +143,7 @@ async function boot() {
     try {
       await loadData();
     } catch (e) {
-      $('#bootView').innerHTML = `<div class="error-box">기록을 불러오지 못했습니다. (${esc(e.message)})</div>`;
+      $('#bootView').innerHTML = `<div class="error-box">기록을 불러오지 못했어요. (${esc(e.message)})</div>`;
       return;
     }
     $('#userMail').textContent = u.email || '';
@@ -196,15 +206,15 @@ $('#loginBtn').onclick = async () => {
     if (e.code === 'auth/popup-blocked') return signInWithRedirect(auth, provider);
     if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') return;
     err.textContent = e.code === 'auth/unauthorized-domain'
-      ? '이 주소에서는 아직 로그인이 허용되지 않았습니다. 관리자에게 알려주세요.'
-      : '로그인하지 못했습니다. (' + e.code + ')';
+      ? '이 주소에서는 아직 로그인이 허용되지 않았어요. 관리자에게 알려주세요.'
+      : '로그인하지 못했어요. (' + e.code + ')';
     err.classList.remove('hidden');
   }
 };
 // 저장하지 않은 내용이 있을 때 물어봄 → true: 계속 진행, false: 멈춤
 async function askUnsaved(actionLabel) {
   if (!editor?.dirty) return true;
-  const pick = await confirmModal({ title: '저장하지 않은 내용이 있어요', message: `${actionLabel} 전에 저장할까요? 저장하지 않으면 지금 적은 내용이 사라집니다.`, okLabel: `저장하고 ${actionLabel}`, cancelLabel: `저장 안 하고 ${actionLabel}` });
+  const pick = await confirmModal({ title: '저장하지 않은 내용이 있어요', message: `${actionLabel} 전에 저장할까요? 저장하지 않으면 지금 적은 내용이 사라져요.`, okLabel: `저장하고 ${actionLabel}`, cancelLabel: `저장 안 하고 ${actionLabel}` });
   if (pick === null) return false;
   if (pick) { try { await saveEditor(true, true); } catch { return false; } }
   else if (editor) editor.dirty = false;
@@ -305,16 +315,16 @@ function renderNav() {
       const cls = page === 'c' && a === c.id ? 'on' : c.id === curClient ? 'parent' : '';
       return `<div class="tree">
         <div class="tree-row">
-          <button class="tw" data-tw="${c.id}" aria-expanded="${open}" aria-label="${esc(c.name)} 기록 ${open ? '접기' : '펼치기'}">▸</button>
+          <button class="tw" data-tw="${c.id}" aria-expanded="${open}" aria-label="${esc(c.name)} 기록 ${open ? '접기' : '펼치기'}">${ic('chevR', 14)}</button>
           <a href="#/c/${c.id}" class="${cls}"><span class="kt" data-tip>${hl(c.name, q)}</span> <span class="cnt">${total}</span></a>
         </div>
         ${open ? `<div class="tree-kids">${recs.map((r) => `
           <a href="#/r/${r.id}" class="kid ${r.id === curRecord ? 'on' : ''}">
             <span class="ktype">${SHORT_TYPE[r.type]}</span><span class="kt" data-tip>${hl(r.title || '', q)}</span>
-          </a>`).join('') || '<span class="kid-empty">아직 기록이 없습니다</span>'}</div>` : ''}
+          </a>`).join('') || '<span class="kid-empty">아직 기록이 없어요</span>'}</div>` : ''}
       </div>`;
     }).join('')}
-    ${q && !groups.length ? '<div class="nav-empty">검색 결과가 없습니다</div>' : ''}
+    ${q && !groups.length ? '<div class="nav-empty">검색 결과가 없어요</div>' : ''}
     ${!q && !viewAs ? `<div class="nav-sep" aria-hidden="true"></div><a href="#/trash" class="nav-trash ${page === 'trash' ? 'on' : ''}"><span class="nav-ic">${LINE_ICON.trash}휴지통</span> <span class="cnt">${trashRows().length}</span></a>` : ''}
 `;
   $('#nav').querySelectorAll('[data-tw]').forEach((b) => {
@@ -407,7 +417,7 @@ function nameModal({ title, okLabel, value = '', exceptId = null }) {
     const check = () => {
       const v = input.value.trim();
       const dup = v && clients.some((c) => c.name === v && c.id !== exceptId);
-      err.hidden = !dup; err.textContent = dup ? '같은 이름의 내담자가 이미 있습니다. 다른 별칭을 써주세요.' : '';
+      err.hidden = !dup; err.textContent = dup ? '같은 이름의 내담자가 이미 있어요. 다른 별칭을 써주세요.' : '';
       input.classList.toggle('invalid', !!dup);
       ok.disabled = !v || dup || v === value;
       return !ok.disabled;
@@ -444,7 +454,7 @@ function viewClient(id) {
       <div class="name-row">
         <h2>${esc(c.name)}</h2>
         <div class="more">
-          <button class="more-btn" id="moreBtn" aria-haspopup="menu" aria-expanded="false" aria-label="내담자 관리 메뉴">⋯</button>
+          <button class="more-btn" id="moreBtn" aria-haspopup="menu" aria-expanded="false" aria-label="내담자 관리 메뉴">${ic('more', 18)}</button>
           <div class="more-menu" id="moreMenu" role="menu" hidden>
             <button role="menuitem" id="renameBtn">이름 바꾸기</button>
             <button role="menuitem" class="danger" id="delClientBtn">내담자 삭제</button>
@@ -452,8 +462,8 @@ function viewClient(id) {
         </div>
       </div>
       <div class="row">
-        <a class="btn h32 new-rec" href="#/new/${id}/journal">+ 상담일지</a>
-        <a class="btn soft h32" href="#/new/${id}/analysis">+ 사례 분석</a>
+        <a class="btn h32 new-rec" href="#/new/${id}/journal">${ic('plus')}상담일지 쓰기</a>
+        <a class="btn soft h32" href="#/new/${id}/analysis">${ic('plus')}사례 분석 쓰기</a>
       </div>
     </div>
     <div class="stack">
@@ -474,11 +484,11 @@ function viewClient(id) {
   };
   $('#delClientBtn').onclick = async () => {
     closeMenu();
-    if (!(await confirmModal({ title: '내담자 삭제', message: `"${c.name}"와 이 내담자의 기록 ${list.length}건을 휴지통으로 옮깁니다. ${TRASH_DAYS}일 안에는 휴지통에서 복구할 수 있어요.`, okLabel: '휴지통으로 옮기기', danger: true }))) return;
+    if (!(await confirmModal({ title: '내담자 삭제', message: `"${c.name}"와 이 내담자의 기록 ${list.length}건을 휴지통으로 옮겨요. ${TRASH_DAYS}일 안에는 복구할 수 있어요.`, okLabel: '휴지통으로 옮기기', danger: true }))) return;
     const now = Date.now();
     try {
       await commitOps([(b) => b.update(userDoc('clients', id), { deletedAt: now }), ...list.map((r) => (b) => b.update(userDoc('records', r.id), { deletedAt: now }))]);
-    } catch { return toast('삭제하지 못했습니다. 인터넷 연결을 확인해 주세요.'); }
+    } catch { return toast('삭제하지 못했어요. 인터넷 연결을 확인해 주세요.'); }
     c.deletedAt = now; list.forEach((r) => (r.deletedAt = now));
     records = records.filter((r) => r.clientId !== id); trash.push(...list);
     clients = clients.filter((x) => x.id !== id); trashClients.push(c);
@@ -547,7 +557,7 @@ function profileCardHTML(c) {
   const open = !!prefs.profileOpen || !items.length;   // 기본 정보가 없으면 상세(예전 메모 등)를 펼쳐서 보여줌
   if (!items.length && !details.length) return `
     <div class="card pf-card pf-empty">
-      <div><h3>내담자 정보</h3><p class="sub" style="margin:0">생년월일·의뢰 경위처럼 계속 기억해야 할 정보를 적어두세요. AI 분석에 함께 참고돼요.</p></div>
+      <div><h3>내담자 정보</h3><p class="sub" style="margin:0">생년월일·의뢰 경위처럼 계속 기억할 정보를 적어두면 AI가 함께 참고해요.</p></div>
       <button class="btn soft h32" id="pfEdit">정보 입력</button>
     </div>`;
   return `
@@ -623,7 +633,7 @@ function openProfileModal(c) {
   };
   const done = () => { document.removeEventListener('keydown', onKey); back.remove(); opener?.focus?.(); };
   const tryClose = async () => {
-    if (dirty() && !(await confirmModal({ title: '저장하지 않고 닫을까요?', message: '입력한 내용이 사라집니다.', okLabel: '닫기', cancelLabel: '계속 입력' }))) return;
+    if (dirty() && !(await confirmModal({ title: '저장하지 않고 닫을까요?', message: '입력한 내용이 사라져요.', okLabel: '닫기', cancelLabel: '계속 입력' }))) return;
     done();
   };
   const onKey = (ev) => { if (ev.key === 'Escape' && !document.querySelector('[role=alertdialog]')) tryClose(); };
@@ -663,7 +673,7 @@ function openProfileModal(c) {
 
 // 처음 쓰는 사람용 3단계 안내: 하나라도 안 끝났으면 홈 위에 보임
 function onboardHTML() {
-  if (viewAs) return clients.length ? '' : '<div class="card empty"><b>아직 내담자가 없습니다</b></div>';
+  if (viewAs) return clients.length ? '' : '<div class="card empty"><b>아직 내담자가 없어요</b></div>';
   const steps = [
     { done: !!profile.geminiKey, t: 'AI 이용 키 등록', d: '결과를 만들 때 필요해요. 무료이고 처음 한 번만 하면 돼요.', act: '<a class="btn h32" href="#/settings">키 등록하기</a>' },
     { done: clients.length > 0, t: '내담자 추가', d: '이름 대신 "A-1"처럼 나만 알아볼 수 있는 별칭을 쓰세요.', act: '<button class="btn h32" id="obClient">내담자 추가</button>' },
@@ -675,7 +685,7 @@ function onboardHTML() {
     <h3>농지니 시작하기 <span class="ob-count">${steps.filter((x) => x.done).length}/3</span></h3>
     <ol class="ob-steps">${steps.map((x, i) => `
       <li class="${x.done ? 'done' : i === next ? 'now' : ''}">
-        <span class="ob-num" aria-hidden="true">${x.done ? '✓' : i + 1}</span>
+        <span class="ob-num" aria-hidden="true">${x.done ? ic('check', 14) : i + 1}</span>
         <div class="ob-text"><b>${x.t}</b>${i === next ? `<span>${x.d}</span>` : ''}</div>
         ${i === next ? x.act : ''}
       </li>`).join('')}</ol>
@@ -721,7 +731,7 @@ function sortList(list) {
 function listInner() {
   const { showClient } = curList;
   const list = sortList(curList.list);
-  if (!list.length) return '<div class="card empty"><b>아직 기록이 없습니다</b>오른쪽 위 [+ 상담일지] 또는 [+ 사례 분석]으로 첫 기록을 만들어 보세요.</div>';
+  if (!list.length) return '<div class="card empty"><b>아직 기록이 없어요</b>오른쪽 위 [상담일지 쓰기]로 첫 기록을 만들어 보세요.</div>';
   const ids = picked(), n = ids.size, all = n === list.length;
   return `
   <div class="list-bar${n ? ' active' : ''}">
@@ -752,7 +762,7 @@ function listInner() {
         <div class="item-line">${showClient ? `<b>${esc(clientName(r.clientId))}</b>` : `<b>${SHORT_TYPE[r.type]}</b>`}<span class="it-preview">${esc(plain(r.result || recordText(r)).slice(0, 200))}</span></div>
       </div>
       <div class="more">
-        <button class="more-btn" data-more aria-haspopup="menu" aria-expanded="false" aria-label="기록 메뉴">⋯</button>
+        <button class="more-btn" data-more aria-haspopup="menu" aria-expanded="false" aria-label="기록 메뉴">${ic('more', 18)}</button>
         <div class="more-menu right" role="menu" hidden>
           <button role="menuitem" data-dup="${r.id}">복제</button>
           <button role="menuitem" class="danger" data-del="${r.id}">삭제</button>
@@ -813,9 +823,9 @@ function bindList() {
 }
 
 async function copyText(text) {
-  if (!text) return toast('복사할 결과가 없습니다');
-  try { await navigator.clipboard.writeText(text); toast('복사했습니다'); }
-  catch { toast('복사하지 못했습니다. 직접 드래그해서 복사해 주세요'); }
+  if (!text) return toast('복사할 결과가 없어요');
+  try { await navigator.clipboard.writeText(text); toast('복사했어요'); }
+  catch { toast('복사하지 못했어요. 직접 드래그해서 복사해 주세요'); }
 }
 
 async function duplicate(id) {
@@ -825,7 +835,7 @@ async function duplicate(id) {
   delete data.editedAt;
   const ref = await addDoc(userCol('records'), data);
   records.unshift({ id: ref.id, ...data });
-  toast('복제했습니다');
+  toast('복제했어요');
   location.hash = '#/r/' + ref.id;
 }
 
@@ -924,7 +934,7 @@ async function generateText(prompt, signal, onText = () => {}) {
   for (const model of models.slice(0, 4)) {
     try {
       const r = await generate(model, prompt, signal, onText);
-      if (!r.text) throw new Error('빈 답변이 돌아왔습니다');
+      if (!r.text) throw new Error('빈 답변이 돌아왔어요');
       return r.text;
     } catch (err) {
       lastErr = err;
@@ -959,7 +969,7 @@ function renderBulk(host, clientId, { text, onBack, onSaved, excludeId, autoGen 
     try {
       sessions = await splitByAI(text, ctrl.signal);
       busy = false;
-      if (sessions.length < 2) return fallback('AI가 나눠봤지만 회기가 하나뿐이에요. 하나의 상담일지로 만들려면 돌아가서 [+ 상담일지 생성]을 누르세요.');
+      if (sessions.length < 2) return fallback('AI가 나눠봤지만 회기가 하나뿐이에요. 하나의 상담일지로 만들려면 돌아가서 [상담일지 생성]을 누르세요.');
       step2(0, true);
     } catch (err) { busy = false; fallback(friendlyError(err)); }
   };
@@ -971,8 +981,8 @@ function renderBulk(host, clientId, { text, onBack, onSaved, excludeId, autoGen 
     box.innerHTML = `
       <div>
         <h3 class="bulk-title">${sessions.length}개 회기로 나눴어요</h3>
-        <p class="sub">제목과 내용을 확인하고 고칠 수 있어요. 저장하지 않을 회기는 체크를 해제하세요.${byAI ? ' (AI가 나눈 결과입니다)' : ''}</p>
-        ${before ? `<p class="hint-line warn">첫 "N회기" 줄 앞에 있던 ${before}줄은 저장하지 않습니다.</p>` : ''}
+        <p class="sub">저장하지 않을 회기는 체크를 해제하세요.${byAI ? ' (AI가 나눈 결과예요)' : ''}</p>
+        ${before ? `<p class="hint-line warn">첫 "N회기" 줄 앞에 있던 ${before}줄은 저장하지 않아요.</p>` : ''}
         <div class="imp-list">${sessions.map((s, i) => {
           const n = (s.title.match(/^(\d+)회기/) || [])[1];
           const dup = n && existing.includes(n);
@@ -1061,10 +1071,10 @@ function renderBulk(host, clientId, { text, onBack, onSaved, excludeId, autoGen 
             }
           }
         }
-        prog(`상담일지 ${created.length}개를 저장하고, ${ok}개의 내용을 만들었어요.` + (ok < created.length ? ' 못 만든 회기는 열어서 [+ 상담일지 생성]을 눌러주세요.' : ''));
+        prog(`상담일지 ${created.length}개를 저장하고, ${ok}개의 내용을 만들었어요.` + (ok < created.length ? ' 못 만든 회기는 열어서 [상담일지 생성]을 눌러주세요.' : ''));
       } else prog(`상담일지 ${created.length}개를 저장했어요.`);
     } catch (err) {
-      prog('저장하지 못했습니다: ' + friendlyError(err));
+      prog('저장하지 못했어요: ' + friendlyError(err));
     }
     busy = false;
     box.querySelector('.bulk-actions').insertAdjacentHTML('beforeend', '<button class="btn" id="iDone">내담자 화면으로</button>');
@@ -1097,7 +1107,7 @@ async function enterViewAs(uid) {
     setHashSilently('#/');
     route();
   } catch (err) {
-    view.main = `<div class="error-box">불러오지 못했습니다. (${esc(err.message)})</div>`;
+    view.main = `<div class="error-box">불러오지 못했어요. (${esc(err.message)})</div>`;
   }
 }
 function exitViewAs() {
@@ -1138,7 +1148,7 @@ async function viewAdmin(uid) {
       view.main = `
         <div class="page-head"><h2>관리자</h2></div>
         ${adminTabs('users')}
-        <p class="sub">사용자를 누르면 그 사람이 보는 화면을 그대로 볼 수 있어요(읽기 전용). AI 이용 키는 보이지 않습니다.</p>
+        <p class="sub">사용자를 누르면 그 사람의 화면을 읽기 전용으로 볼 수 있어요.</p>
         <div class="table-wrap"><table class="admin-table">
           <thead><tr><th>사용자</th><th>내담자</th><th>상담일지</th><th>사례 분석</th><th>문장으로 쓰기</th><th>결과 생성</th><th>마지막 접속</th></tr></thead>
           <tbody>${rows.map((r) => {
@@ -1172,7 +1182,7 @@ async function viewAdmin(uid) {
       </details>`;
     };
     view.main = `
-      <a class="back" href="#/admin">← 관리자</a>
+      <a class="back" href="#/admin">${ic('back', 14)}관리자</a>
       <div class="page-head"><h2>${esc(email)}</h2><button class="btn ghost h32" id="adminRefresh">새로고침</button></div>
       <p class="sub">읽기 전용 · 내담자 ${data.clients.length}명 · 기록 ${data.records.length}건</p>
       ${data.clients.map((c) => `
@@ -1180,10 +1190,10 @@ async function viewAdmin(uid) {
           <h3>${esc(c.name)} <span class="sub" style="margin:0">기록 ${byClient(c.id).length}건</span></h3>
           ${profileText(c) ? `<p class="sub" style="white-space:pre-wrap">${esc(profileText(c))}</p>` : ''}
           ${byClient(c.id).map(recHTML).join('') || '<p class="sub">기록 없음</p>'}
-        </div>`).join('') || '<div class="card empty"><b>아직 내담자가 없습니다</b></div>'}`;
+        </div>`).join('') || '<div class="card empty"><b>아직 내담자가 없어요</b></div>'}`;
     $('#adminRefresh').onclick = () => { delete adminCache[uid]; viewAdmin(uid); };
   } catch (err) {
-    view.main = `<div class="error-box">불러오지 못했습니다. Firebase 보안 규칙에 관리자 권한이 적용됐는지 확인해 주세요. (${esc(err.message)})</div>`;
+    view.main = `<div class="error-box">불러오지 못했어요. Firebase 보안 규칙에 관리자 권한이 적용됐는지 확인해 주세요. (${esc(err.message)})</div>`;
   }
 }
 
@@ -1282,14 +1292,14 @@ async function viewFeedback() {
   const main = $('#main');
   view.main = '<div class="status"><span class="spinner"></span>불러오는 중…</div>';
   try { await loadFeedback(); } catch (e) {
-    view.main = `<div class="page-head"><h2>관리자</h2></div>${adminTabs('feedback')}<div class="error-box">의견을 불러오지 못했습니다. Firebase 콘솔에 새 보안 규칙(firestore.rules)을 게시했는지 확인해 주세요. (${esc(e.message)})</div>`;
+    view.main = `<div class="page-head"><h2>관리자</h2></div>${adminTabs('feedback')}<div class="error-box">의견을 불러오지 못했어요. Firebase 콘솔에 새 보안 규칙(firestore.rules)을 게시했는지 확인해 주세요. (${esc(e.message)})</div>`;
     return;
   }
   const render = () => {
     view.main = `
       <div class="page-head"><h2>관리자</h2><button class="btn ghost h32" id="fbRefresh">새로고침</button></div>
       ${adminTabs('feedback')}
-      <p class="sub">새로 온 의견이 위에 보여요. 상태를 바꾸면 바로 저장돼요.</p>
+      <p class="sub">새 의견이 위에 보여요.</p>
       ${feedback.length ? `<div class="list">${feedback.slice().sort((a, b) => (a.status === 'new' ? 0 : 1) - (b.status === 'new' ? 0 : 1) || b.createdAt - a.createdAt).map((f) => `
         <div class="item fb-item ${f.status === 'new' ? 'is-new' : ''}">
           <div class="item-body">
@@ -1339,7 +1349,7 @@ function exportRecords(kind) {
   a.download = `농지니_기록_${stamp}.${kind}`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  toast('파일을 저장했습니다');
+  toast('파일을 저장했어요');
 }
 
 // 일반 확인 모달
@@ -1377,7 +1387,7 @@ function confirmDelete(title, message) {
       <div class="modal modal-sm" role="alertdialog" aria-modal="true" aria-labelledby="dTitle" aria-describedby="dMsg">
         <div class="modal-body">
           <h3 id="dTitle">${esc(title)}</h3>
-          <p class="sub" id="dMsg">${esc(message)}<br><b>삭제하면 되돌릴 수 없습니다.</b></p>
+          <p class="sub" id="dMsg">${esc(message)}<br><b>삭제하면 되돌릴 수 없어요.</b></p>
           <label class="field" style="margin:0">
             <span class="del-label">확인을 위해 아래 칸에 <b>삭제</b>라고 입력해 주세요.</span>
             <input type="text" id="dInput" autocomplete="off" aria-label="삭제라고 입력">
@@ -1421,7 +1431,7 @@ async function trashRecords(ids, reroute = true) {
   const now = Date.now();
   try {
     await commitOps(ids.map((id) => (b) => b.update(userDoc('records', id), { deletedAt: now })));
-  } catch { toast('삭제하지 못했습니다. 인터넷 연결을 확인해 주세요.'); return false; }
+  } catch { toast('삭제하지 못했어요. 인터넷 연결을 확인해 주세요.'); return false; }
   const moved = records.filter((r) => ids.includes(r.id));
   moved.forEach((r) => (r.deletedAt = now));
   records = records.filter((r) => !ids.includes(r.id)); trash.push(...moved);
@@ -1493,7 +1503,7 @@ function viewTrash() {
       <h2>휴지통</h2>
       ${all.length ? '<div class="row"><button class="btn ghost h32" id="tRestoreAll">모두 복구</button><button class="btn danger h32" id="tEmpty">휴지통 비우기</button></div>' : ''}
     </div>
-    <p class="sub">삭제한 기록과 내담자는 ${TRASH_DAYS}일 동안 보관한 뒤 자동으로 영구 삭제돼요.</p>
+    <p class="sub">${TRASH_DAYS}일이 지나면 자동으로 영구 삭제돼요.</p>
     ${all.length ? `
     <div class="list-bar${n ? ' active' : ''}">
       <label class="bar-check">
@@ -1525,7 +1535,7 @@ function viewTrash() {
           <div class="item-line"><b>${isC ? '내담자' : SHORT_TYPE[x.item.type]}</b><span class="it-preview">${esc(info)}</span></div>
         </div>
         <div class="more">
-          <button class="more-btn" data-more aria-haspopup="menu" aria-expanded="false" aria-label="휴지통 항목 메뉴">⋯</button>
+          <button class="more-btn" data-more aria-haspopup="menu" aria-expanded="false" aria-label="휴지통 항목 메뉴">${ic('more', 18)}</button>
           <div class="more-menu right" role="menu" hidden>
             <button role="menuitem" data-trestore="${k}">복구</button>
             <button role="menuitem" class="danger" data-tpurge="${k}">영구 삭제</button>
@@ -1539,12 +1549,12 @@ function viewTrash() {
   const done = (msg) => { trashSel.clear(); viewTrash(); renderNav(); toast(msg); };
   const restore = async (list) => {
     try { const cnt = await restoreItems(list); done(`${cnt}건을 복구했어요`); }
-    catch { toast('복구하지 못했습니다. 인터넷 연결을 확인해 주세요.'); }
+    catch { toast('복구하지 못했어요. 인터넷 연결을 확인해 주세요.'); }
   };
   const purge = async (list, title) => {
-    if (!(await confirmDelete(title, `${list.length}건을 영구 삭제합니다.`))) return;
+    if (!(await confirmDelete(title, `${list.length}건을 영구 삭제해요.`))) return;
     try { await purgeItems(list); done('영구 삭제했어요'); }
-    catch { toast('삭제하지 못했습니다. 인터넷 연결을 확인해 주세요.'); }
+    catch { toast('삭제하지 못했어요. 인터넷 연결을 확인해 주세요.'); }
   };
   const toggle = (k) => { trashSel.has(k) ? trashSel.delete(k) : trashSel.add(k); viewTrash(); $(`[data-tpick="${k}"]`)?.focus(); };
   // 카드를 누르면 고르기 (휴지통 항목은 열어볼 화면이 없음)
@@ -1579,7 +1589,7 @@ function openBatchRun(list) {
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="bTitle">
       <div class="modal-body" id="bBody">
         <h3 id="bTitle">고른 기록 ${list.length}건 결과 만들기</h3>
-        <p class="sub">적용할 이론을 고르세요. 고른 기록 모두에 같은 이론을 적용합니다.</p>
+        <p class="sub">고른 기록 모두에 같은 이론을 적용해요.</p>
         <div class="row" style="margin:-4px 0 6px"><button class="link-btn" data-all>모두 선택</button><button class="link-btn" data-none>모두 해제</button></div>
         <div id="bLenses">${manifest.lenses.map((l) => `
           <label class="lens">
@@ -1589,13 +1599,13 @@ function openBatchRun(list) {
         <label class="check modal-hist">
           <input type="checkbox" id="bHistory" checked>
           <span>이전 기록 참고하기
-            <small>기록마다 그보다 앞선 기록 최대 ${HISTORY_COUNT}건을 함께 보냅니다. 내담자 정보는 항상 함께 참고합니다.</small>
+            <small>기록마다 앞선 기록 최대 ${HISTORY_COUNT}건을 함께 참고해요.</small>
           </span>
         </label>
         ${had ? `<label class="check modal-hist">
           <input type="checkbox" id="bSkip" checked>
           <span>이미 결과가 있는 ${had}건은 건너뛰기
-            <small>해제하면 지금 결과가 새 결과로 바뀝니다</small>
+            <small>해제하면 지금 결과가 새 결과로 바뀌어요</small>
           </span>
         </label>` : ''}
         <p class="modal-note" id="bEta"></p>
@@ -1878,8 +1888,8 @@ function renderEditorBody() {
   const autoTitle = sentence && e.type === 'journal' && !editForm;   // 새 상담일지 문장 쓰기는 제목을 내용 첫 줄(N회기·날짜)에서 자동으로 만듦
   host.innerHTML = `
     ${editForm ? '' : `<p class="sub">${sentence
-      ? (e.type === 'journal' ? '회기마다 첫 줄에 "N회기 날짜 시간"을 적고 내용을 이어서 쓰세요. 지난 회기까지 여러 개를 한꺼번에 넣으면 회기별 상담일지로 나눠 저장됩니다.' : '내담자와 사례에 대해 아는 내용을 편하게 문장으로 적으세요. AI가 항목별로 나눠 분석합니다.')
-      : '아는 항목만 키워드나 짧은 문장으로 적으세요. 빈 칸은 건너뜁니다.'}</p>`}
+      ? (e.type === 'journal' ? '회기마다 첫 줄에 "N회기 날짜 시간"을 적어주세요. 여러 회기를 한꺼번에 넣으면 회기별로 나눠 저장해요.' : '아는 내용을 편하게 적어주세요. AI가 항목별로 나눠 분석해요.')
+      : '아는 항목만 짧게 적어주세요. 빈 칸은 건너뛰어요.'}</p>`}
     ${autoTitle ? '' : `<div class="field">
       <label for="title">제목</label>
       <input type="text" id="title" value="${esc(e.title)}">
@@ -1907,7 +1917,7 @@ function updateSplitHint() {
   el.className = 'split-hint' + (n >= 2 ? ' on' : '');
   const t = (e.inputs[freeField('journal').label] || '').trim();
   el.innerHTML = n >= 2
-    ? `<span>📋 <b>${n}개 회기</b>가 들어 있어요. 저장하거나 생성하면 회기별 상담일지 ${n}개로 나눠집니다.</span>`
+    ? `<span><b>${n}개 회기</b>가 들어 있어요. 저장하면 회기별 상담일지 ${n}개로 나눠져요.</span>`
     : (t && n === 0 && t.length > 200 ? '<span>회기 표시("N회기") 없이 여러 회기를 넣었나요?</span><button class="link-btn" id="splitBtn">AI로 회기 나누기</button>' : '');
   on('#splitBtn', 'click', () => startSplit(false));
 }
@@ -1993,13 +2003,13 @@ function renderReadView() {
   view.main = `
     <div class="page-head editor-head">
       <div>
-        <a class="back" href="#/c/${e.clientId}">← ${esc(clientName(e.clientId))}</a>
+        <a class="back" href="#/c/${e.clientId}">${ic('back', 14)}${esc(clientName(e.clientId))}</a>
         <div class="eyebrow">${TYPE[e.type]}</div>
       </div>
       <div class="row head-actions">
         <button class="btn danger small" id="delBtn">삭제</button>
         <button class="btn ghost h32" id="editBtn">수정</button>
-        <button class="btn h32" id="runBtn">${e.result ? SHORT[e.type] + ' 다시 생성' : '+ ' + TYPE[e.type] + ' 생성'}</button>
+        <button class="btn h32" id="runBtn">${e.result ? SHORT[e.type] + ' 다시 생성' : TYPE[e.type] + ' 생성'}</button>
       </div>
     </div>
 
@@ -2012,7 +2022,7 @@ function renderReadView() {
         <div class="read-field">
           ${e.mode === 'sentence' ? '' : `<div class="read-label">${esc(f.label)}</div>`}
           <div class="read-value">${esc(e.inputs[f.label])}</div>
-        </div>`).join('') : '<p class="sub" style="margin:0">입력한 내용이 없습니다.</p>'}
+        </div>`).join('') : '<p class="sub" style="margin:0">입력한 내용이 없어요.</p>'}
     </div>
 
     <!-- 만든 결과는 입력한 내용 아래 (입력 → 결과 순서로 읽힘) -->
@@ -2050,14 +2060,14 @@ function renderEditForm() {
   view.main = `
     <div class="page-head editor-head">
       <div>
-        <a class="back" href="#/c/${e.clientId}">← ${esc(clientName(e.clientId))}</a>
+        <a class="back" href="#/c/${e.clientId}">${ic('back', 14)}${esc(clientName(e.clientId))}</a>
         <div class="eyebrow">${TYPE[e.type]} · ${e.id ? '수정 중' : '새 기록'}</div>
       </div>
       <div class="row head-actions">
         <span class="save-state" id="dirtyMark" aria-live="polite"></span>
         ${e.id ? '<button class="btn ghost h32" id="cancelBtn">취소</button>' : ''}
         <button class="btn h32" id="saveBtn" disabled>내용 저장</button>
-        <button class="btn h32" id="runBtn">${e.result ? SHORT[e.type] + ' 다시 생성' : '+ ' + TYPE[e.type] + ' 생성'}</button>
+        <button class="btn h32" id="runBtn">${e.result ? SHORT[e.type] + ' 다시 생성' : TYPE[e.type] + ' 생성'}</button>
       </div>
     </div>
 
@@ -2110,7 +2120,7 @@ function renderEditForm() {
 async function cancelEdit() {
   const e = editor;
   if (e.dirty) {
-    const ok = await confirmModal({ title: '수정한 내용을 버릴까요?', message: '저장하지 않은 수정 내용은 사라집니다.', okLabel: '버리기', cancelLabel: '계속 수정', danger: true });
+    const ok = await confirmModal({ title: '수정한 내용을 버릴까요?', message: '저장하지 않은 수정 내용은 사라져요.', okLabel: '버리기', cancelLabel: '계속 수정', danger: true });
     if (!ok) return;
   }
   const saved = records.find((r) => r.id === e.id);
@@ -2134,7 +2144,7 @@ async function openRunModal() {
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
       <div class="modal-body">
         <h3 id="mTitle">${e.result ? SHORT[e.type] + ' 다시 생성' : TYPE[e.type] + ' 생성'}</h3>
-        <p class="sub">적용할 이론을 고르세요. 하나도 고르지 않으면 이론 없이 입력 내용만으로 작성합니다.</p>
+        <p class="sub">하나도 고르지 않으면 입력 내용만으로 작성해요.</p>
         <div class="row" style="margin:-4px 0 6px"><button class="link-btn" data-all>모두 선택</button><button class="link-btn" data-none>모두 해제</button></div>
         <div id="mLenses">${manifest.lenses.map((l) => `
           <label class="lens">
@@ -2144,11 +2154,11 @@ async function openRunModal() {
         <label class="check modal-hist">
           <input type="checkbox" id="mHistory" ${e.useHistory && prevCount ? 'checked' : ''} ${prevCount ? '' : 'disabled'}>
           <span>이 내담자의 이전 기록 참고하기
-            <small>${prevCount ? `최근 기록 ${Math.min(prevCount, HISTORY_COUNT)}건을 함께 보내 변화와 반복되는 주제를 반영합니다` : '아직 참고할 이전 기록이 없습니다'}</small>
+            <small>${prevCount ? `최근 기록 ${Math.min(prevCount, HISTORY_COUNT)}건을 참고해 변화와 반복되는 주제를 반영해요` : '아직 참고할 이전 기록이 없어요'}</small>
           </span>
         </label>
-        ${memo ? '<p class="modal-note">내담자 정보(나이·의뢰 경위 등)도 함께 참고합니다.</p>' : ''}
-        ${e.result ? '<p class="modal-note">지금 결과는 새 결과로 바뀝니다.</p>' : ''}
+        ${memo ? '<p class="modal-note">내담자 정보도 함께 참고해요.</p>' : ''}
+        ${e.result ? '<p class="modal-note">지금 결과는 새 결과로 바뀌어요.</p>' : ''}
       </div>
       <div class="modal-actions">
         <button class="btn ghost" data-cancel>취소</button>
@@ -2203,7 +2213,7 @@ function setSaveState(e, state) {
   if (editor !== e) return;
   const m = $('#dirtyMark'); if (!m) return;
   m.className = 'save-state ' + state;
-  m.innerHTML = { idle: '', dirty: '저장 안 됨', saving: '저장 중…', saved: '✓ 저장됨', error: '저장 실패 · <button class="link-btn" id="retrySave">다시 시도</button>' }[state] || '';
+  m.innerHTML = { idle: '', dirty: '저장 안 됨', saving: '저장 중…', saved: `${ic('check', 14)}저장됨`, error: '저장 실패 · <button class="link-btn" id="retrySave">다시 시도</button>' }[state] || '';
   const sb = $('#saveBtn'); if (sb) sb.disabled = !(state === 'dirty' || state === 'error');
   if (state === 'error') $('#retrySave').onclick = () => saveEditor(true, true);
 }
@@ -2243,11 +2253,11 @@ async function doSave(e, silent, byUser) {
       if (editor === e) setHashSilently('#/r/' + ref.id);
     }
     if ((e.rev || 0) === rev) { e.dirty = false; setSaveState(e, 'saved'); }
-    if (!silent) toast('저장했습니다');
+    if (!silent) toast('저장했어요');
     renderNav();
   } catch (err) {
     setSaveState(e, 'error');
-    toast('저장하지 못했습니다. 인터넷 연결을 확인해 주세요.');
+    toast('저장하지 못했어요. 인터넷 연결을 확인해 주세요.');
     throw err;
   }
 }
@@ -2311,7 +2321,7 @@ async function findModels(key) {
     /flash/.test(n) && !/lite/.test(n) ? 200 + ver(n) :
     /flash/.test(n) ? 100 + ver(n) : 0;
   const picked = list.filter((n) => rank(n) > 0).sort((a, b) => rank(b) - rank(a));
-  if (!picked.length) throw new Error('이 키로 쓸 수 있는 모델을 찾지 못했습니다.');
+  if (!picked.length) throw new Error('이 키로 쓸 수 있는 모델을 찾지 못했어요.');
   return picked;
 }
 
@@ -2324,13 +2334,13 @@ async function apiError(res) {
 }
 
 function friendlyError(e) {
-  if (e.name === 'AbortError') return '중단했습니다.';
-  if (e.status === 400 && /API key/i.test(e.message)) return '이용 키가 올바르지 않습니다. 설정에서 키를 다시 확인해 주세요.';
-  if (e.status === 403) return '이 키로는 사용할 수 없습니다. 구글 AI 스튜디오에서 키를 새로 만들어 등록해 주세요.';
-  if (e.status === 429) return '무료 사용량을 잠시 초과했습니다. 1분 뒤에 다시 시도해 주세요. (하루 사용량을 넘었다면 다음 날 오후 4~5시쯤 초기화됩니다)';
-  if (e.status >= 500) return '구글 서버가 잠시 불안정합니다. 조금 뒤 다시 시도해 주세요.';
+  if (e.name === 'AbortError') return '중단했어요.';
+  if (e.status === 400 && /API key/i.test(e.message)) return '이용 키가 올바르지 않아요. 설정에서 키를 다시 확인해 주세요.';
+  if (e.status === 403) return '이 키로는 쓸 수 없어요. 구글 AI 스튜디오에서 키를 새로 만들어 등록해 주세요.';
+  if (e.status === 429) return '무료 사용량을 잠시 넘었어요. 1분 뒤에 다시 시도해 주세요. (하루 사용량을 넘었다면 다음 날 오후 4~5시쯤 풀려요)';
+  if (e.status >= 500) return '구글 서버가 잠시 불안정해요. 조금 뒤 다시 시도해 주세요.';
   if (e instanceof TypeError) return '인터넷 연결을 확인해 주세요.';
-  return '문제가 생겼습니다: ' + e.message;
+  return '문제가 생겼어요: ' + e.message;
 }
 
 async function generate(model, prompt, signal, onText) {
@@ -2472,8 +2482,8 @@ async function run() {
     }
     if (!result) throw lastErr;
     if (!result.text) throw new Error(result.finish === 'BLOCKED' || result.finish === 'SAFETY'
-      ? '구글의 안전 기준 때문에 답변이 만들어지지 않았습니다. 표현을 조금 바꿔서 다시 시도해 주세요.'
-      : '빈 답변이 돌아왔습니다. 다시 시도해 주세요.');
+      ? '구글의 안전 기준 때문에 답변이 만들어지지 않았어요. 표현을 조금 바꿔서 다시 시도해 주세요.'
+      : '빈 답변이 돌아왔어요. 다시 시도해 주세요.');
     if (editor !== e) return;
     e.result = result.text;
     e.dirty = true; e.rev = (e.rev || 0) + 1;   // 결과는 반드시 저장되도록 표시
@@ -2481,13 +2491,13 @@ async function run() {
     e.editing = false;
     renderEditor();
     setStatus(result.finish === 'MAX_TOKENS'
-      ? '답변이 길어서 중간에 끊겼습니다. 이론 수를 줄여서 다시 만들어 보세요. (자동 저장됨)'
-      : '완성되어 자동 저장했습니다. 내용을 꼭 검토한 뒤 사용해 주세요.', false);
+      ? '답변이 길어서 중간에 끊겼어요. 이론 수를 줄여서 다시 만들어 보세요. (자동 저장됨)'
+      : '완성해서 저장했어요. 꼭 검토한 뒤 사용해 주세요.', false);
   } catch (err) {
     if (editor !== e) return;
     if (partial) {
       e.result = partial; markDirty(true);
-      setStatus(friendlyError(err) + ' (여기까지 작성된 내용입니다. 필요하면 저장을 눌러주세요)', false);
+      setStatus(friendlyError(err) + ' (여기까지 작성됐어요. 필요하면 저장을 눌러주세요)', false);
     } else {
       e.result = before;
       setStatus('', false);
@@ -2510,12 +2520,12 @@ function viewSettings() {
     <div class="stack">
       <div class="card">
         <h3>AI 이용 키 (처음 한 번만)</h3>
-        <p class="sub">구글의 무료 AI 이용 키입니다. 카드 등록이 필요 없고, 한 번 등록하면 어느 기기에서 로그인해도 그대로 쓸 수 있습니다.</p>
+        <p class="sub">구글의 무료 키예요. 카드 등록 없이 한 번만 등록하면 어느 기기에서든 쓸 수 있어요.</p>
         ${showForm ? `<ol class="steps">
-          <li><span><a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">구글 AI 스튜디오 열기 ↗</a> 를 누르고 같은 구글 계정으로 로그인합니다.</span></li>
-          <li><span>약관 동의 화면이 나오면 동의합니다.</span></li>
-          <li><span><b>Create API key</b>(API 키 만들기)를 누릅니다.</span></li>
-          <li><span>만들어진 키를 복사해서 아래 칸에 붙여넣고 <b>저장</b>을 누릅니다.</span></li>
+          <li><span><a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">구글 AI 스튜디오${ic('ext', 13)}</a>를 열고 같은 구글 계정으로 로그인</span></li>
+          <li><span>약관 동의 화면이 나오면 동의</span></li>
+          <li><span><b>Create API key</b>(API 키 만들기) 누르기</span></li>
+          <li><span>만든 키를 복사해 아래 칸에 붙여넣고 <b>저장</b></span></li>
         </ol>
         <div class="field">
           <label for="keyInput">${hasKey ? '새 이용 키' : '이용 키'}</label>
@@ -2527,7 +2537,7 @@ function viewSettings() {
           ${hasKey ? '<button class="btn ghost small" id="cancelKey">취소</button>' : ''}
         </div>` : `
         <div class="key-row">
-          <div><div class="key-ok">✓ 등록됨</div><code class="key-mask">${esc(maskKey(profile.geminiKey))}</code></div>
+          <div><div class="key-ok">${ic('check', 14)}등록됨</div><code class="key-mask">${esc(maskKey(profile.geminiKey))}</code></div>
           <div class="row">
             <button class="btn ghost small" id="editKey">키 변경</button>
             <button class="btn danger small" id="removeKey">키 삭제</button>
@@ -2536,7 +2546,7 @@ function viewSettings() {
       </div>
       <div class="card">
         <h3>기록 내보내기</h3>
-        <p class="sub">내 내담자와 기록 전체를 파일로 저장합니다. 정기적으로 받아두면 실수로 지웠을 때도 내용을 보관할 수 있어요.</p>
+        <p class="sub">내담자와 기록 전체를 파일로 받아요. 가끔 받아두면 실수로 지워도 안심이에요.</p>
         <div class="row">
           <button class="btn small" id="exportTxt">읽기용 파일(.txt) 받기</button>
           <button class="btn ghost small" id="exportJson">백업용 파일(.json) 받기</button>
@@ -2544,7 +2554,7 @@ function viewSettings() {
       </div>
       <div class="card">
         <h3>계정</h3>
-        <p class="sub">${esc(user.email || '')} 으로 로그인되어 있습니다. 내담자 ${clients.length}명, 기록 ${records.length}건</p>
+        <p class="sub">${esc(user.email || '')} · 내담자 ${clients.length}명 · 기록 ${records.length}건</p>
       </div>
     </div>`;
 
@@ -2557,7 +2567,7 @@ function viewSettings() {
     const k = $('#keyInput').value.trim();
     if (!k) return state('키를 붙여넣어 주세요', 'bad');
     $('#saveKey').disabled = true;
-    state('키를 확인하고 있습니다…');
+    state('키를 확인하는 중…');
     try {
       models = await findModels(k);
       await setDoc(doc(db, 'users', user.uid, 'private', 'settings'), { geminiKey: k }, { merge: true });
@@ -2569,7 +2579,7 @@ function viewSettings() {
   };
   const rm = $('#removeKey');
   if (rm) rm.onclick = async () => {
-    if (!(await confirmModal({ title: '이용 키 삭제', message: '저장된 AI 이용 키를 지웁니다. 다시 쓰려면 키를 새로 등록해야 합니다.', okLabel: '키 삭제', danger: true }))) return;
+    if (!(await confirmModal({ title: '이용 키 삭제', message: '저장된 AI 이용 키를 지워요. 다시 쓰려면 새로 등록해야 해요.', okLabel: '키 삭제', danger: true }))) return;
     await setDoc(doc(db, 'users', user.uid, 'private', 'settings'), { geminiKey: '' }, { merge: true });
     profile.geminiKey = ''; models = null; keyEdit = false;
     viewSettings();
