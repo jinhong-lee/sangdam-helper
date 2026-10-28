@@ -449,7 +449,7 @@
   .pmeta .step { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   @media (prefers-reduced-motion: reduce) { .pfill { transition: none; } .pfill.indet { animation: none; width: 100%; opacity: .35; } }
   /* 긴 글은 한 줄이 너무 길면 읽기 어려움 → 문단만 약 48em(한 줄 45~50자)으로 제한, 표는 전체 폭 */
-  .result > p, .result > ul, .result > ol, .result > blockquote, .read-value { max-width: 48em; }
+  .result > p, .result > ul, .result > ol, .result > blockquote { max-width: 48em; }
   .result { font-size: 15px; line-height: 1.75; overflow-wrap: anywhere; }
   .result h1, .result h2, .result h3 { line-height: 1.4; margin: 1.4em 0 .5em; }
   .result h1 { font-size: 18px; } .result h2 { font-size: 16px; } .result h3 { font-size: 15px; }

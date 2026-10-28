@@ -28,9 +28,15 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 const p2 = (n) => String(n).padStart(2, '0');
 const fmtDay = (ts) => { const d = new Date(ts); return `${p2(d.getFullYear() % 100)}.${p2(d.getMonth() + 1)}.${p2(d.getDate())}`; };
 const fmtDate = (ts) => { const d = new Date(ts); return `${fmtDay(d)} ${p2(d.getHours())}:${p2(d.getMinutes())}`; };
-// 기록의 날짜 표시: createdAt은 정렬용(여러 회기 저장 시 회기 날짜), writtenAt은 실제 작성 시각, editedAt은 사람이 [내용 저장]으로 고친 시각.
-// AI 생성·다시 생성은 수정으로 치지 않음. 예전 기록(writtenAt 없음)은 마지막 저장 시각(updatedAt)으로 표시.
-const recDate = (r) => r.editedAt ? `${fmtDate(r.editedAt)} (수정)` : fmtDate(r.writtenAt || r.updatedAt || r.createdAt);
+// ⚠ 작성일과 상담일은 완전히 다른 값:
+//   작성일 = 기록을 실제로 쓴 시각(writtenAt, 예전 기록은 createdAt) → 화면의 날짜 표시·'최근 작성순'
+//   상담일 = 제목에 적은 회기 날짜·시간 → '상담일순'·이전 기록 참고·한꺼번에 만들기·내보내기 순서
+//   createdAt은 예전에 여러 회기 저장 때 상담일을 넣은 적이 있어 화면 표시에 직접 쓰지 않음.
+// editedAt은 사람이 [내용 저장]으로 고친 시각(AI 생성·다시 생성은 수정으로 치지 않음).
+const writtenOf = (r) => r.writtenAt || r.createdAt || r.updatedAt || 0;
+const sessionOf = (r) => (r?.title && parseHeader(r.title).ts) || null;   // 제목에 상담일이 없으면 null
+const chronoOf = (r) => sessionOf(r) || writtenOf(r);                     // 회기 흐름 순서
+const recDate = (r) => r.editedAt ? `수정 ${fmtDate(r.editedAt)}` : `작성 ${fmtDate(writtenOf(r))}`;
 const plain = (md) => (md || '').replace(/[#*|>`_-]+/g, ' ').replace(/\s+/g, ' ').trim();
 
 // ---------- 화면 갱신 ----------
@@ -164,7 +170,7 @@ async function loadData() {
   ];
   if (ops.length) commitOps(ops).catch(() => {});   // 실패해도 다음에 열 때 다시 정리
   clients = allC.filter((c) => !c.deletedAt).sort((a, b) => a.name.localeCompare(b.name, 'ko'));
-  records = allR.filter((r) => !r.deletedAt).sort((a, b) => b.createdAt - a.createdAt);
+  records = allR.filter((r) => !r.deletedAt).sort((a, b) => writtenOf(b) - writtenOf(a));
   trashClients = allC.filter((c) => c.deletedAt && !expired(c));
   trash = allR.filter((r) => r.deletedAt && !expired(r));
   models = null;
@@ -284,7 +290,7 @@ function renderNav() {
   const curClient = editor?.clientId || (page === 'c' ? a : null);
   const q = navQuery.trim().toLowerCase();
   const groups = clients.map((c) => {
-    let recs = clientRecords(c.id).slice().sort((x, y) => y.createdAt - x.createdAt);
+    let recs = sortList(clientRecords(c.id));   // 목록과 같은 정렬
     const nameHit = !q || c.name.toLowerCase().includes(q);
     if (q && !nameHit) recs = recs.filter((r) => (r.title || '').toLowerCase().includes(q));
     return { c, recs, show: nameHit || recs.length, total: clientRecords(c.id).length };
@@ -705,12 +711,11 @@ const shortDay = fmtDay;
 const picked = () => sel?.ids || new Set();
 // 목록 정렬: 최근 작성순(기본) / 상담일순. 상담일 = 제목의 회기 날짜·시간, 없으면 작성일. 회기 번호는 바꾸지 않음.
 const SORTS = { recent: '최근 작성순', sessionDesc: '상담일 최신순', sessionAsc: '상담일 오래된순' };
-const sessionTs = (r) => (r.title && parseHeader(r.title).ts) || r.writtenAt || r.createdAt || 0;
 function sortList(list) {
   const k = SORTS[prefs.listSort] ? prefs.listSort : 'recent';
   const a = list.slice();
-  if (k === 'recent') return a.sort((x, y) => (y.createdAt || 0) - (x.createdAt || 0));
-  return a.sort((x, y) => (k === 'sessionAsc' ? 1 : -1) * (sessionTs(x) - sessionTs(y) || (x.createdAt || 0) - (y.createdAt || 0)));
+  if (k === 'recent') return a.sort((x, y) => writtenOf(y) - writtenOf(x));
+  return a.sort((x, y) => (k === 'sessionAsc' ? 1 : -1) * (chronoOf(x) - chronoOf(y) || writtenOf(x) - writtenOf(y)));
 }
 function listInner() {
   const { showClient } = curList;
@@ -740,7 +745,7 @@ function listInner() {
       <div class="item-body">
         <div class="item-title">
           <span class="it-name">${esc(r.title)}</span>
-          <span class="it-date" title="${esc(recDate(r))}">${shortDay(r.createdAt || r.writtenAt || r.updatedAt)}</span>
+          <span class="it-date" title="${esc(recDate(r))}">${shortDay(writtenOf(r))}</span>
           ${(() => { const b = batchState(r.id); return b ? `<span class="it-state ${b}">${b === 'run' ? '결과 만드는 중' : '결과 대기'}</span>` : `<span class="it-state ${r.result ? 'done' : ''}">${r.result ? '결과 있음' : '결과 없음'}</span>`; })()}
         </div>
         <div class="item-line">${showClient ? `<b>${esc(clientName(r.clientId))}</b>` : `<b>${SHORT_TYPE[r.type]}</b>`}<span class="it-preview">${esc(plain(r.result || recordText(r)).slice(0, 200))}</span></div>
@@ -797,7 +802,7 @@ function bindList() {
     const all = picked().size === curList.list.length;
     sel = { ids: new Set(all ? [] : curList.list.map((r) => r.id)) }; renderList(); $('#selAll')?.focus();
   });
-  on('#listSort', 'change', (e) => { prefs.listSort = e.target.value; savePrefs(prefs); renderList(); $('#listSort')?.focus(); });
+  on('#listSort', 'change', (e) => { prefs.listSort = e.target.value; savePrefs(prefs); renderList(); renderNav(); $('#listSort')?.focus(); });
   on('#selCancel', 'click', () => { sel = null; renderList(); $('#selAll')?.focus(); });
   on('#selGen', 'click', () => openBatchRun(curList.list.filter((r) => picked().has(r.id))));
   on('#selDel', 'click', () => trashRecords([...picked()]));
@@ -1025,8 +1030,8 @@ function renderBulk(host, clientId, { text, onBack, onSaved, excludeId, autoGen 
     try {
       for (const [i, s] of picked.entries()) {
         prog(`기록 저장 중… ${i + 1}/${picked.length}`);
-        const t0 = s.ts || Date.now() - (picked.length - i) * 1000;
-        const data = { writtenAt: Date.now(), clientId, type: 'journal', title: s.title, inputs: { [freeLabel()]: s.content }, mode: 'sentence', lenses: lensIds, useHistory: true, result: '', createdAt: t0, updatedAt: Date.now() };
+        const t0 = Date.now() + i;   // 작성 시각 (상담일은 제목에 들어 있음). 같은 순간이라도 순서가 유지되게 1ms씩
+        const data = { writtenAt: t0, clientId, type: 'journal', title: s.title, inputs: { [freeLabel()]: s.content }, mode: 'sentence', lenses: lensIds, useHistory: true, result: '', createdAt: t0, updatedAt: Date.now() };
         const ref = await addDoc(userCol('records'), data);
         records.unshift({ id: ref.id, ...data });
         created.push({ id: ref.id, ...data, row: s.row });
@@ -1114,7 +1119,7 @@ async function loadUserData(uid) {
   return {
     // 쓰레기통에 있는 것은 관리자 집계·화면에서 제외
     clients: cs.docs.map((d) => ({ id: d.id, ...d.data() })).filter((c) => !c.deletedAt).sort((a, b) => a.name.localeCompare(b.name, 'ko')),
-    records: rs.docs.map((d) => ({ id: d.id, ...d.data() })).filter((r) => !r.deletedAt).sort((a, b) => b.createdAt - a.createdAt),
+    records: rs.docs.map((d) => ({ id: d.id, ...d.data() })).filter((r) => !r.deletedAt).sort((a, b) => writtenOf(b) - writtenOf(a)),
   };
 }
 const pct = (n, total) => (total ? Math.round((n / total) * 100) + '%' : '-');
@@ -1269,7 +1274,7 @@ function updateFbBadge() {
 }
 async function loadFeedback() {
   const s = await getDocs(collection(db, 'feedback'));
-  feedback = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt - a.createdAt);
+  feedback = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => writtenOf(b) - writtenOf(a));
   updateFbBadge();
 }
 async function viewFeedback() {
@@ -1320,7 +1325,7 @@ function exportRecords(kind) {
     body = `농지니 기록 · ${nowStamp()} 내보냄\n내담자 ${clients.length}명 · 기록 ${records.length}건\n`;
     clients.forEach((c) => {
       body += `\n${line}\n[내담자] ${c.name}\n${profileText(c) ? profileText(c) + '\n' : ''}${line}\n`;
-      clientRecords(c.id).slice().sort((a, b) => a.createdAt - b.createdAt).forEach((r) => {
+      clientRecords(c.id).slice().sort((a, b) => chronoOf(a) - chronoOf(b)).forEach((r) => {   // 상담 흐름 순서
         body += `\n▶ [${TYPE[r.type]}] ${r.title} (${recDate(r)})\n\n■ 입력 내용\n`;
         Object.entries(r.inputs || {}).filter(([, v]) => (v || '').trim()).forEach(([k, v]) => { body += `- ${k}: ${v.trim()}\n`; });
         body += `\n■ 결과\n${(r.result || '(아직 결과 없음)').trim()}\n\n${'-'.repeat(40)}\n`;
@@ -1454,7 +1459,7 @@ async function restoreItems(rows) {
   trash = trash.filter((r) => !recIds.has(r.id));
   trashClients.filter((c) => cliIds.has(c.id)).forEach((c) => { delete c.deletedAt; clients.push(c); });
   trashClients = trashClients.filter((c) => !cliIds.has(c.id));
-  records.sort((a, b) => b.createdAt - a.createdAt);
+  records.sort((a, b) => writtenOf(b) - writtenOf(a));
   clients.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
   return recIds.size + cliIds.size;
 }
@@ -1505,7 +1510,7 @@ function viewTrash() {
         <input type="checkbox" class="pick" data-tpick="${k}" ${trashSel.has(k) ? 'checked' : ''} aria-label="${esc(isC ? x.item.name : x.item.title)} 선택">
         <div class="item-body">
           <div class="item-title"><span class="tag ${isC ? 'client' : x.item.type}">${isC ? '내담자' : TYPE[x.item.type]}</span>${esc(isC ? x.item.name : x.item.title)}</div>
-          <div class="item-meta">${isC ? `기록 ${codeleted(x.item).length}건과 함께 삭제` : `${esc(anyClientName(x.clientId))}${trashClients.some((c) => c.id === x.clientId) ? ' (삭제된 내담자)' : ''} · 상담 ${fmtDay(x.item.createdAt)}`} · ${fmtDay(x.deletedAt)} 삭제 · <span class="trash-left">${left(x)}일 후 영구 삭제</span></div>
+          <div class="item-meta">${isC ? `기록 ${codeleted(x.item).length}건과 함께 삭제` : `${esc(anyClientName(x.clientId))}${trashClients.some((c) => c.id === x.clientId) ? ' (삭제된 내담자)' : ''} · ${sessionOf(x.item) ? '상담 ' + fmtDay(sessionOf(x.item)) : '작성 ' + fmtDay(writtenOf(x.item))}`} · ${fmtDay(x.deletedAt)} 삭제 · <span class="trash-left">${left(x)}일 후 영구 삭제</span></div>
         </div>
         <div class="item-actions">
           <button class="btn ghost small" data-trestore="${k}">복구</button>
@@ -1614,7 +1619,7 @@ function openBatchRun(list) {
   goBtn.onclick = () => {
     const lenses = boxes().filter((b) => b.checked).map((b) => b.value);
     const useHistory = back.querySelector('#bHistory').checked;
-    const todo = targets().slice().sort((a, b) => a.createdAt - b.createdAt);   // 오래된 기록부터 → 뒤 기록이 앞 기록 결과를 참고
+    const todo = targets().slice().sort((a, b) => chronoOf(a) - chronoOf(b));   // 상담일이 이른 회기부터 → 뒤 회기가 앞 회기 결과를 참고
     prefs.lenses_journal = lenses; savePrefs(prefs);
     close();
     sel = null; renderList();
@@ -1762,7 +1767,7 @@ function openBatchModal() {
           <button class="pf-close" data-x aria-label="닫기"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
         <p class="sub" id="bProg" aria-live="polite"></p>
         <div class="imp-list">${batch.items.map((x, i) => `
-          <div class="imp-row batch-row" data-st="${i}"><div class="imp-main"><b>${esc(x.r.title)}</b><span class="sub" style="margin:0">${esc(clientName(x.r.clientId))} · ${fmtDay(x.r.createdAt)}</span><span class="bs-note" hidden></span></div>
+          <div class="imp-row batch-row" data-st="${i}"><div class="imp-main"><b>${esc(x.r.title)}</b><span class="sub" style="margin:0">${esc(clientName(x.r.clientId))} · 작성 ${fmtDay(writtenOf(x.r))}</span><span class="bs-note" hidden></span></div>
             <span class="bs-status"><span class="bs-label"></span><span class="bs-donut"></span></span></div>`).join('')}</div>
       </div>
       <div class="modal-actions" id="bActions"></div>
@@ -1829,6 +1834,7 @@ function openEditor(src) {
     useHistory: src.useHistory ?? hasHistory,
     result: src.result || '',
     createdAt: src.createdAt || null,
+    writtenAt: src.writtenAt || null,
     dirty: false,
     editingResult: false,
     editing: !src.id,          // 저장된 기록은 읽기 화면으로 열고, [수정]을 눌러야 편집
@@ -1923,7 +1929,7 @@ function okToSave(e) {
       <div class="modal modal-sm" role="alertdialog" aria-modal="true" aria-labelledby="sTitle" aria-describedby="sMsg">
         <div class="modal-body">
           <h3 id="sTitle">비슷한 기록이 이미 있어요</h3>
-          <p class="sub" id="sMsg" style="margin:0">"${esc(d.title)}" (${fmtDay(d.createdAt)})과 내용 앞부분이 같아요. 같은 회기를 두 번 저장하는 건 아닌지 확인해 주세요.</p>
+          <p class="sub" id="sMsg" style="margin:0">"${esc(d.title)}" (작성 ${fmtDay(writtenOf(d))})과 내용 앞부분이 같아요. 같은 회기를 두 번 저장하는 건 아닌지 확인해 주세요.</p>
           <p style="margin:12px 0 0"><button class="link-btn" data-view>기존 기록 새 탭에서 보기</button></p>
         </div>
         <div class="modal-actions">
@@ -2105,7 +2111,7 @@ async function openRunModal() {
   if (canSplit(e) && sessionCount(e) >= 2) return startSplit(true);   // 여러 회기면 묻지 않고 회기별 미리보기로(내용 생성 체크된 상태)
   if (!(await okToSave(e))) return;
   applyAutoTitle(e);
-  const prevCount = prevRecords(e.clientId, e.id, e.createdAt).length;
+  const prevCount = prevRecords(e.clientId, e.id, sessionOf(e) || (e.id ? writtenOf(e) : null)).length;
   const memo = profileText(clients.find((c) => c.id === e.clientId));
   const opener = document.activeElement;
   const back = document.createElement('div');
@@ -2237,10 +2243,11 @@ async function doSave(e, silent, byUser) {
 function recordText(r) {
   return (r.result || Object.values(r.inputs || {}).filter((v) => typeof v === 'string').join('\n\n')).trim();
 }
-function prevRecords(clientId, id, createdAt) {
+// 이 기록보다 상담일이 앞선 기록(최근 것부터). before가 없으면(새 기록) 전부.
+function prevRecords(clientId, id, before) {
   return clientRecords(clientId)
-    .filter((r) => r.id !== id && recordText(r) && (!createdAt || r.createdAt < createdAt))
-    .sort((a, b) => b.createdAt - a.createdAt);
+    .filter((r) => r.id !== id && recordText(r) && (!before || chronoOf(r) < before))
+    .sort((a, b) => chronoOf(b) - chronoOf(a));
 }
 
 function buildPrompt(e = editor) {
@@ -2259,10 +2266,10 @@ function buildPrompt(e = editor) {
   out += sep + docs[manifest.formats[e.type].id];
 
   if (e.useHistory) {
-    const prev = prevRecords(e.clientId, e.id, e.createdAt).slice(0, HISTORY_COUNT).reverse();
+    const prev = prevRecords(e.clientId, e.id, sessionOf(e) || (e.id ? writtenOf(e) : null)).slice(0, HISTORY_COUNT).reverse();
     if (prev.length) {
       out += sep + `# [이전 기록] 같은 내담자의 최근 기록 ${prev.length}건 (오래된 순)\n\n이전 기록과 비교해 **변화, 반복되는 주제, 연속성**을 반영하십시오. 이전 기록과 이번 입력 정보가 다르면 이번 입력 정보를 우선하십시오.\n\n`
-        + prev.map((r) => `## ${TYPE[r.type]} · ${r.title} · ${fmtDay(r.createdAt)}${r.result ? '' : ' (작성 원문)'}\n\n${recordText(r).slice(0, 4000)}`).join('\n\n');
+        + prev.map((r) => `## ${TYPE[r.type]} · ${r.title}${sessionOf(r) ? '' : ` · 작성 ${fmtDay(writtenOf(r))}`}${r.result ? '' : ' (작성 원문)'}\n\n${recordText(r).slice(0, 4000)}`).join('\n\n');
     }
   }
 
