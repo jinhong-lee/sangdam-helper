@@ -1515,6 +1515,16 @@ async function purgeItems(rows) {
 }
 
 let trashSel = new Set(), trashFilter = '';
+// 휴지통을 내담자별로 나눠 보여주기: 최근에 지운 내담자 묶음이 위, 묶음 안에서는 내담자 행이 먼저
+function trashGroups(rows) {
+  const map = new Map();
+  rows.forEach((x) => { if (!map.has(x.clientId)) map.set(x.clientId, []); map.get(x.clientId).push(x); });
+  return [...map.entries()].map(([id, list]) => ({
+    id, name: anyClientName(id), gone: trashClients.some((c) => c.id === id),
+    rows: list.sort((a, b) => (a.kind === 'client' ? -1 : b.kind === 'client' ? 1 : b.deletedAt - a.deletedAt)),
+    last: Math.max(...list.map((x) => x.deletedAt)),
+  })).sort((a, b) => b.last - a.last);
+}
 // 휴지통 항목 미리보기: 지운 기록·내담자 내용을 읽기 전용으로 보여주고, 여기서 바로 복구·영구 삭제
 function openTrashPreview(x, left, { onRestore, onPurge }) {
   const opener = document.activeElement;
@@ -1600,11 +1610,14 @@ function viewTrash() {
         <button class="btn ghost" id="tCancel">취소</button>
       </div>` : names.length > 1 ? `<label class="sort-wrap"><span class="sr-only">내담자로 거르기</span><select id="tFilter" class="sort-select"><option value="">모든 내담자</option>${names.map(([id, nm]) => `<option value="${id}" ${id === trashFilter ? 'selected' : ''}>${esc(nm)}</option>`).join('')}</select></label>` : ''}
     </div>
-    <div class="list">${rows.map((x) => {
+    ${trashGroups(rows).map((g) => `
+    <section class="trash-group" aria-label="${esc(g.name)}">
+      <h4 class="tg-head">${esc(g.name)}${g.gone ? '<span class="tg-gone">삭제된 내담자</span>' : ''}<span class="tg-cnt">${g.rows.length}건</span></h4>
+      <div class="list">${g.rows.map((x) => {
       const k = trashKey(x), isC = x.kind === 'client', on = trashSel.has(k), kind = isC ? 'client' : x.item.type;
       const name = isC ? x.item.name : x.item.title;
       const info = isC ? `기록 ${codeleted(x.item).length}건과 함께 삭제`
-        : `${anyClientName(x.clientId)}${trashClients.some((c) => c.id === x.clientId) ? ' (삭제된 내담자)' : ''} · ${sessionOf(x.item) ? '상담 ' + fmtDay(sessionOf(x.item)) : '작성 ' + fmtDay(writtenOf(x.item))}`;
+        : `${sessionOf(x.item) ? '상담 ' + fmtDay(sessionOf(x.item)) : '작성 ' + fmtDay(writtenOf(x.item))}`;
       return `
       <div class="item trash-item${on ? ' picked' : ''}" data-tkey="${k}">
         <button type="button" class="thumb ${kind}" data-tpick="${k}" aria-pressed="${on}" aria-label="${esc(name)} 선택">
@@ -1626,7 +1639,8 @@ function viewTrash() {
           </div>
         </div>
       </div>`;
-    }).join('')}</div>` : `
+    }).join('')}</div>
+    </section>`).join('')}` : `
     ${emptyHTML('휴지통이 비어 있어요', `기록이나 내담자를 삭제하면 여기에 ${TRASH_DAYS}일 동안 보관돼요.`)}`}`;
 
   const byKey = (k) => rows.find((x) => trashKey(x) === k);

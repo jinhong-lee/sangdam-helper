@@ -563,6 +563,11 @@
   .head-l { min-width: 0; }
   .client-meta { margin: 4px 0 0; font-size: 13px; line-height: 18px; letter-spacing: 0px; color: var(--text-2); font-variant-numeric: tabular-nums; }
   .client-meta:empty { display: none; }
+  /* 휴지통: 내담자별 묶음 */
+  .trash-group + .trash-group { margin-top: 24px; }
+  .tg-head { display: flex; align-items: center; gap: 8px; margin: 0 0 8px 4px; font-size: 15px; line-height: 22px; letter-spacing: 0px; font-weight: 700; }
+  .tg-cnt { font-size: 13px; line-height: 18px; letter-spacing: 0px; font-weight: 400; color: var(--text-2); }
+  .tg-gone { font-size: 11px; line-height: 14px; letter-spacing: 0px; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: var(--accent-soft); color: var(--accent); }
   /* 휴지통 미리보기 */
   .tp-modal { max-width: 720px; }
   .tp-head { align-items: flex-start; padding: 24px 24px 16px; border-bottom: 1px solid var(--line); }
