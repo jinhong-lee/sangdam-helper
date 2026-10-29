@@ -1102,7 +1102,7 @@ function renderBulk(host, clientId, { text, onBack, onSaved, excludeId, autoGen 
       prog('저장하지 못했어요: ' + friendlyError(err));
     }
     busy = false;
-    box.querySelector('.bulk-actions').insertAdjacentHTML('beforeend', '<button class="btn solo" id="iDone">내담자 화면으로</button>');
+    box.querySelector('.bulk-actions').insertAdjacentHTML('beforeend', '<button class="btn" id="iDone">내담자 화면으로</button>');
     box.querySelector('#iStop')?.remove();
     box.querySelector('#iDone').onclick = () => { location.hash = '#/c/' + clientId; };
     await onSaved?.();
