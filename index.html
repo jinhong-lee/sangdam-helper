@@ -102,9 +102,10 @@
   .more-menu a:hover, .more-menu a:focus-visible { background: var(--surface-2); outline: none; }
   .acct-menu button { display: flex; align-items: center; gap: 8px; }
   /* 메뉴 머리(로고)·발(의견·관리자·계정) */
-  .side-head { padding: 20px 16px 16px; }
-  .side-foot { flex-shrink: 0; display: grid; gap: 2px; padding: 8px 12px 12px; border-top: 1px solid var(--line); background: var(--surface); }
-  .sf-item { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; border: 0; border-radius: 8px; background: none; font: inherit; font-size: 14px; line-height: 22px; letter-spacing: 0px; color: var(--text); text-decoration: none; cursor: pointer; text-align: left; }
+  /* 왼쪽 메뉴 리듬: 바깥 여백 12 · 줄 안쪽 8 → 글자 시작선 20으로 통일. 줄 높이는 내담자 32 / 기록 28, 줄 사이 틈 없음 */
+  .side-head { padding: 20px 20px 12px; }
+  .side-foot { flex-shrink: 0; display: grid; gap: 0; padding: 8px 12px 12px; border-top: 1px solid var(--line); background: var(--surface); }
+  .sf-item { display: flex; align-items: center; gap: 8px; width: 100%; height: 32px; padding: 0 8px; border: 0; border-radius: 8px; background: none; font: inherit; font-size: 14px; line-height: 22px; letter-spacing: 0px; color: var(--text); text-decoration: none; cursor: pointer; text-align: left; }
   .sf-item:hover, .sf-item[aria-expanded="true"] { background: var(--surface-2); }
   .sf-item .hd-ic { color: var(--text-2); margin-left: 0; }
   .sf-label { flex: 1; }
@@ -121,7 +122,7 @@
   body.resizing { cursor: col-resize; user-select: none; }
   @media (max-width: 860px) { .side-resizer { display: none; } }
   .sidebar { position: sticky; top: 0; min-width: 0; height: 100vh; display: flex; flex-direction: column; background: var(--surface); border-right: 1px solid var(--line); }   /* 화면 왼쪽 끝에 붙은 메뉴: 위 로고 · 가운데 목록(스크롤) · 아래 계정 고정 */
-  .side-body { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 16px 24px; }
+  .side-body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 12px 16px; }
   .sidebar > .viewas-badge { margin: 0 16px 10px; white-space: normal; flex-wrap: wrap; }
   #main { justify-self: center; width: 100%; max-width: 1200px; padding: 20px 32px 80px; }   /* 메뉴를 뺀 영역의 가운데. 긴 글은 아래 .result/.read-value에서 읽기 좋은 폭으로 따로 제한 */
   #main { min-width: 0; }
@@ -142,34 +143,37 @@
     #main { padding: 20px 16px 80px; }
   }
   .side-title { font-size: 11px; line-height: 14px; letter-spacing: 0px; font-weight: 700; color: var(--text-2); margin: 0 0 8px 10px; }
-  .nav { display: grid; gap: 2px; }
+  .nav { display: grid; gap: 0; }
   .nav a {
     display: flex; justify-content: space-between; align-items: center; gap: 8px;
-    padding: 8px 12px; border-radius: 8px; color: var(--text); text-decoration: none; font-size: 14px; line-height: 22px; letter-spacing: 0px;
+    height: 32px; padding: 0 8px; border-radius: 8px; color: var(--text); text-decoration: none; font-size: 14px; line-height: 22px; letter-spacing: 0px;
   }
   .nav a:hover { background: var(--surface-2); }
   .nav a.on { background: var(--primary-soft); color: var(--primary); font-weight: 700; }
   .nav .cnt { font-size: 12px; line-height: 16px; letter-spacing: 0px; color: var(--text-2); }
-  .nav-gap { height: 14px; }
-  .nav-add { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; margin: -4px 0 6px; padding: 8px 12px; border: 0; border-radius: 8px; background: none; font: inherit; font-size: 14px; line-height: 22px; letter-spacing: 0px; font-weight: 700; color: var(--primary); cursor: pointer; }
+  .nav-add { display: flex; align-items: center; gap: 8px; width: 100%; height: 32px; text-align: left; margin: 0 0 4px; padding: 0 8px; border: 0; border-radius: 8px; background: none; font: inherit; font-size: 14px; line-height: 22px; letter-spacing: 0px; font-weight: 700; color: var(--primary); cursor: pointer; }
   .nav-add:hover { background: var(--surface-2); }
-  .nav-search { position: relative; margin-bottom: 8px; }
-  .nav-search svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--text-2); pointer-events: none; }
+  .nav-search { position: relative; margin-bottom: 4px; }
+  .nav-search svg { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--text-2); pointer-events: none; }
   .nav-search input[type="search"] { height: 32px; padding: 0 12px 0 32px; font-size: 13px; line-height: 18px; letter-spacing: 0px; border-radius: 8px; }
   .nav mark { background: var(--accent-soft); color: inherit; border-radius: 4px; padding: 0 1px; }
   .nav-empty { font-size: 13px; line-height: 18px; letter-spacing: 0px; color: var(--text-2); padding: 8px 12px; }
   .nav-tip { position: fixed; z-index: 200; max-width: 320px; padding: 8px 12px; border-radius: 8px; background: var(--text); color: var(--surface); font-size: 12px; line-height: 16px; letter-spacing: 0px; pointer-events: none; box-shadow: var(--shadow-pop); }
-  .tree-row { display: flex; align-items: center; gap: 2px; }
-  .tree-row a { flex: 1; min-width: 0; }
+  /* 내담자 줄: 펼침 화살표까지 한 줄로 칠해서 선택·호버가 줄 전체에 걸리게 */
+  .tree-row { display: flex; align-items: center; height: 32px; padding-left: 4px; border-radius: 8px; }
+  .tree-row:hover { background: var(--surface-2); }
+  .tree-row:has(a.on) { background: var(--primary-soft); }
+  .tree-row a { flex: 1; min-width: 0; padding-left: 4px; }
+  .nav .tree-row a:hover, .nav .tree-row a.on { background: none; }
   .nav a.parent { font-weight: 700; }
-  .tw { width: 22px; height: 22px; flex-shrink: 0; border: 0; background: none; color: var(--text-2); cursor: pointer; border-radius: 8px; display: grid; place-items: center; padding: 0; transition: transform .15s; }
-  .tw:hover { background: var(--surface-2); color: var(--text); }
+  .tw { width: 24px; height: 24px; flex-shrink: 0; border: 0; background: none; color: var(--text-2); cursor: pointer; border-radius: 8px; display: grid; place-items: center; padding: 0; transition: transform .15s; }
+  .tw:hover { color: var(--text); }
   .tw[aria-expanded="true"] { transform: rotate(90deg); }
-  .tree-kids { display: grid; gap: 1px; margin: 2px 0 8px 22px; padding-left: 8px; border-left: 1px solid var(--line); }
-  .nav a.kid { justify-content: flex-start; gap: 4px; padding: 8px 8px; font-size: 13px; line-height: 18px; letter-spacing: 0px; color: var(--text-2); }
+  .tree-kids { display: grid; gap: 0; margin: 0 0 4px 15px; padding-left: 8px; border-left: 1px solid var(--line); }
+  .nav a.kid { justify-content: flex-start; gap: 4px; height: 28px; padding: 0 8px; font-size: 13px; line-height: 18px; letter-spacing: 0px; color: var(--text-2); }
   .nav a.kid.on { color: var(--primary); }
   .nav .kt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .kid-empty { font-size: 12px; line-height: 16px; letter-spacing: 0px; color: var(--text-2); padding: 8px 8px; }
+  .kid-empty { display: flex; align-items: center; height: 28px; font-size: 12px; line-height: 16px; letter-spacing: 0px; color: var(--text-2); padding: 0 8px; }
   /* 모바일: 메뉴를 '내담자 ▾' 하나로 접어 본문이 바로 보이게 */
   .nav-toggle { display: none; }
   @media (max-width: 860px) {
@@ -355,7 +359,7 @@
   .item-actions { display: flex; gap: 4px; flex-shrink: 0; align-items: center; }
   .trash-left { color: var(--accent); }
   .tag.client { background: var(--surface-2); color: var(--text-2); }
-  .nav-sep { height: 1px; margin: 10px 0 4px; background: var(--line); }   /* 휴지통 위 구분선, 선과 휴지통 사이 4px */
+  .nav-sep { height: 1px; margin: 8px 0; background: var(--line); }   /* 휴지통 위 구분선 */
   .nav a.nav-trash { color: var(--text-2); }
   .nav a.nav-trash.on { color: var(--primary); }
 
