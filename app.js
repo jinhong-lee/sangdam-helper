@@ -938,7 +938,8 @@ const picked = () => sel?.ids || new Set();
 // 회기 번호순(내담자 화면 기본): 상담일지를 번호 큰 순으로, 사례 분석은 그 아래. 이 정렬에서만 끌어서 순서를 바꿀 수 있음.
 const SORTS = { sessNo: '회기 번호순', sessionDesc: '상담일 최신순', sessionAsc: '상담일 오래된순', recent: '최근 작성순' };
 function sortKey(showClient) {
-  const k = prefs.listSort;
+  // 내담자 화면은 정렬을 따로 기억(예전에 고른 '최근 작성순' 등이 새 기본값 '회기 번호순'을 가리지 않게)
+  const k = showClient ? prefs.listSort : prefs.clientSort;
   if (k === 'sessNo' && showClient) return 'sessionDesc';   // 여러 내담자가 섞인 목록에선 번호순이 의미 없음
   return SORTS[k] ? k : (showClient ? 'sessionDesc' : 'sessNo');
 }
@@ -1131,7 +1132,7 @@ function bindList() {
     const all = picked().size === curList.list.length;
     sel = { ids: new Set(all ? [] : curList.list.map((r) => r.id)) }; renderList(); $('#selAll')?.focus();
   });
-  on('#listSort', 'change', (e) => { prefs.listSort = e.target.value; savePrefs(prefs); renderList(); renderNav(); $('#listSort')?.focus(); });
+  on('#listSort', 'change', (e) => { prefs[curList?.showClient ? 'listSort' : 'clientSort'] = e.target.value; savePrefs(prefs); renderList(); renderNav(); $('#listSort')?.focus(); });
   on('#selCancel', 'click', () => { sel = null; renderList(); $('#selAll')?.focus(); });
   on('#selGen', 'click', () => openBatchRun(curList.list.filter((r) => picked().has(r.id))));
   on('#selDel', 'click', () => trashRecords([...picked()]));
