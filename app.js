@@ -600,20 +600,59 @@ function capWarn(clientId, n, intake) {
   return `이번 달 ${n}번째 회기예요 (월 ${nb.cap}회 기준). 보강이면 번호를 직접 고쳐주세요.`;
 }
 // 기존 기록 번호 정리: 상담일 순서대로 다시 매긴 번호(바뀌는 것만)
+// 내용 비교 키: 첫 줄이 "N회기 날짜" 머리줄이면 빼고 비교 (나눠 저장한 기록은 머리줄이 빠져 있어서, 그대로 비교하면 같은 회기를 못 알아봄)
+function bodyKey(inputs) {
+  const lines = Object.values(inputs || {}).filter((v) => typeof v === 'string').join('\n').trim().split('\n');
+  if (lines.length && HEADER_RE.test(lines[0])) {
+    const rest = lines[0].replace(HEADER_RE, '').replace(/(\d{4}\s*[.\-/년]\s*)?\d{1,2}\s*(월|[/.])\s*\d{1,2}\s*일?/, '').replace(/(오전|오후|AM|PM|am|pm)?\s*\d{1,2}\s*(시|:)\s*(\d{1,2}\s*분?)?/, '').replace(/^[\s,·:\-)\]]+/, '');
+    lines[0] = rest;
+  }
+  return lines.join('').replace(/\s+/g, '').slice(0, 60);
+}
+// 내용 첫 줄 머리줄의 상담일 (제목 날짜가 작성 시각으로 잘못 들어간 예전 기록을 바로잡는 데 씀)
+function headerTsOf(r) {
+  const first = Object.values(r.inputs || {}).filter((v) => typeof v === 'string').join('\n').trim().split('\n')[0] || '';
+  if (!HEADER_RE.test(first)) return null;
+  const h = parseHeader(first); return h.ts ? h : null;
+}
+// 정리 계획: 같은 내용 사본은 번호에서 빼고(지우라고 안내), 제목 날짜가 내용 첫 줄과 다르면 바로잡고,
+// 번호와 날짜 순서가 엇갈리면(4회기 8/29, 5회기 8/27) 날짜 오타일 수 있어 기본으로 체크 해제.
 function renumberPlan(clientId) {
   const nb = numberingOf(clientId);
-  const list = clientRecords(clientId).filter((r) => r.type === 'journal').sort((a, b) => chronoOf(a) - chronoOf(b) || writtenOf(a) - writtenOf(b));
+  const all = clientRecords(clientId).filter((r) => r.type === 'journal');
+  // 1) 같은 내용 묶기: 결과 있는 것 → 먼저 쓴 것을 남김
+  const groups = new Map();
+  all.forEach((r) => { const k = bodyKey(r.inputs); if (k.length >= 10) groups.set(k, [...(groups.get(k) || []), r]); });
+  const dupOf = new Map();
+  groups.forEach((g) => {
+    if (g.length < 2) return;
+    const keep = g.slice().sort((a, b) => (!!b.result - !!a.result) || writtenOf(a) - writtenOf(b))[0];
+    g.forEach((r) => r !== keep && dupOf.set(r.id, keep));
+  });
+  // 2) 상담일: 제목 날짜가 내용 첫 줄 날짜와 다른 날이면 첫 줄 날짜를 씀
+  const eff = new Map(), fixDate = new Map();
+  all.forEach((r) => {
+    const h = headerTsOf(r), t = sessionOf(r);
+    if (h && (!t || fmtDay(h.ts) !== fmtDay(t))) { fixDate.set(r.id, h); eff.set(r.id, h.ts); } else eff.set(r.id, chronoOf(r));
+  });
+  const list = all.filter((r) => !dupOf.has(r.id)).sort((a, b) => eff.get(a.id) - eff.get(b.id) || writtenOf(a) - writtenOf(b));
+  // 3) 번호와 날짜 순서가 엇갈린 기록
+  const flip = new Set(); let prev = null;
+  list.forEach((r) => { const n = numOf(r); if (!n || !countsAsSession(r, nb)) return; if (prev && n < numOf(prev)) { flip.add(r.id); flip.add(prev.id); } prev = r; });
   const out = []; let n = 0, month = null;
   for (const r of list) {
-    const t = chronoOf(r), intake = isIntake(r);
+    const t = eff.get(r.id), intake = isIntake(r), fd = fixDate.get(r.id);
     if (nb.monthly && (month === null || !sameMonth(month, t))) { n = 0; month = t; }
     const counted = countsAsSession(r, nb);
     if (counted) n++;
-    const title = retitle(r.title, sessLabel(counted ? n : null, intake, clientId));
-    if (title !== r.title) out.push({ r, from: r.title, to: title });
+    const base = fd ? stampOf(fd.ts, fd.hasTime) : r.title;
+    const title = retitle(base, sessLabel(counted ? n : null, intake, clientId));
+    if (title !== r.title) out.push({ r, from: r.title, to: title, dateFix: !!fd, flip: flip.has(r.id), t });
   }
-  return out;
+  all.filter((r) => dupOf.has(r.id)).forEach((r) => out.push({ r, from: r.title, dup: dupOf.get(r.id), t: eff.get(r.id) }));
+  return out.sort((a, b) => a.t - b.t);
 }
+const needsCheck = (clientId) => dupNumbers(clientId) || renumberPlan(clientId).some((p) => p.dup || p.dateFix || p.flip);
 const dupNumbers = (clientId) => {
   const nb = numberingOf(clientId), seen = new Map();
   clientRecords(clientId).filter((r) => r.type === 'journal' && countsAsSession(r, nb) && numOf(r)).forEach((r) => {
@@ -624,6 +663,7 @@ const dupNumbers = (clientId) => {
 };
 async function openRenumber(clientId) {
   const plan = renumberPlan(clientId);
+  const dups = plan.filter((p) => p.dup).length, fixable = plan.length - dups;
   const nb = numberingOf(clientId);
   const opener = document.activeElement;
   const back = document.createElement('div');
@@ -633,29 +673,40 @@ async function openRenumber(clientId) {
       <div class="modal-body">
         <h3 id="rnTitle">회기 번호 정리</h3>
         <p class="sub">상담일 순서대로 ${nb.monthly ? '매달 1부터' : '1부터 누적으로'} 다시 매겨요${nb.intakeSep ? ' (초기상담은 번호 없이)' : ''}. 세는 방식은 내담자 정보에서 바꿀 수 있어요.</p>
+        ${dups ? `<p class="hint-line warn rn-top">같은 내용 기록 ${dups}건은 번호에서 뺐어요. 사본을 휴지통으로 옮겨 주세요${dups > 1 ? ` · <button type="button" class="link-btn" data-trash-all>사본 ${dups}건 모두 휴지통으로</button>` : ''}</p>` : ''}
         ${plan.length ? `
-          <div class="row" style="margin:-4px 0 6px"><button class="link-btn" data-all>모두 선택</button><button class="link-btn" data-none>모두 해제</button></div>
-          <div class="rn-list">${plan.map((p, i) => `
+          ${fixable ? '<div class="row" style="margin:-4px 0 6px"><button class="link-btn" data-all>모두 선택</button><button class="link-btn" data-none>모두 해제</button></div>' : ''}
+          <div class="rn-list">${plan.map((p, i) => p.dup ? `
+            <div class="rn-row rn-dup">
+              <span><b>${esc(p.from)}</b><em>같은 내용이 '${esc(p.dup.title)}'에도 있어요${p.dup.result ? '(결과 있음)' : ''} · <a class="link-btn" href="#/r/${p.r.id}" data-go>열어 보기</a> · <button type="button" class="link-btn" data-trash="${p.r.id}">휴지통으로</button></em></span>
+            </div>` : `
             <label class="check rn-row">
-              <input type="checkbox" data-i="${i}" checked>
-              <span><s>${esc(p.from)}</s><b>${esc(p.to)}</b></span>
+              <input type="checkbox" data-i="${i}" ${p.flip ? '' : 'checked'}>
+              <span><s>${esc(p.from)}</s><b>${esc(p.to)}</b>${p.dateFix ? '<em>제목 날짜를 내용 첫 줄의 상담일로 바로잡아요</em>' : ''}${p.flip ? '<em class="warn">번호와 날짜 순서가 엇갈려요. 날짜가 맞는지 먼저 확인해 주세요.</em>' : ''}</span>
             </label>`).join('')}</div>
-          <p class="hint-line">직접 고쳐둔 번호(다른 기관에서 이어 온 회기 등)는 체크를 해제하면 그대로 둬요.</p>`
+          ${fixable ? '<p class="hint-line">직접 고쳐둔 번호(다른 기관에서 이어 온 회기 등)는 체크를 해제하면 그대로 둬요.</p>' : ''}`
         : '<p class="sub" style="margin:0">모든 번호가 이미 상담일 순서와 맞아요.</p>'}
       </div>
       <div class="modal-actions">
-        <button class="btn ghost" data-cancel>${plan.length ? '취소' : '닫기'}</button>
-        ${plan.length ? '<button class="btn" data-ok></button>' : ''}
+        <button class="btn ghost" data-cancel>${fixable ? '취소' : '닫기'}</button>
+        ${fixable ? '<button class="btn" data-ok></button>' : ''}
       </div>
     </div>`;
   document.body.appendChild(back);
   const checks = [...back.querySelectorAll('[data-i]')], ok = back.querySelector('[data-ok]');
-  const sync = () => { if (!ok) return; const n = checks.filter((c) => c.checked).length; ok.disabled = !n; ok.textContent = n ? `${n}건 번호 바꾸기` : '바꿀 기록을 고르세요'; };
+  const sync = () => { if (!ok) return; const n = checks.filter((c) => c.checked).length; ok.disabled = !n; ok.textContent = n ? `${n}건 바꾸기` : '바꿀 기록을 고르세요'; };
   const done = () => { document.removeEventListener('keydown', onKey); back.remove(); opener?.focus?.(); };
   const onKey = (ev) => { if (ev.key === 'Escape') done(); };
   document.addEventListener('keydown', onKey);
   back.querySelector('[data-cancel]').onclick = done;
-  back.onclick = (ev) => { if (ev.target === back) done(); };
+  back.onclick = async (ev) => {
+    if (ev.target === back || ev.target.closest('[data-go]')) return done();
+    const one = ev.target.closest('[data-trash]'), all = ev.target.closest('[data-trash-all]');
+    if (!one && !all) return;
+    const ids = all ? plan.filter((p) => p.dup).map((p) => p.r.id) : [one.dataset.trash];
+    if (!(await trashRecords(ids, false))) return;
+    done(); route(); openRenumber(clientId);   // 지운 뒤 번호를 다시 계산해서 보여줌
+  };
   back.querySelector('[data-all]')?.addEventListener('click', () => { checks.forEach((c) => (c.checked = true)); sync(); });
   back.querySelector('[data-none]')?.addEventListener('click', () => { checks.forEach((c) => (c.checked = false)); sync(); });
   checks.forEach((c) => (c.onchange = sync));
@@ -849,8 +900,8 @@ function flowHTML(clientId) {
   if (!js.length) return '';
   const lastT = Math.max(0, ...js.map(sessionOf).filter(Boolean));
   const ago = lastT ? Math.floor((Date.now() - lastT) / 864e5) : null;
-  const fix = viewAs || js.length < 2 ? '' : dupNumbers(clientId)
-    ? ' · <button class="link-btn warn" id="renumBtn">회기 번호가 겹쳐요 · 정리하기</button>'
+  const fix = viewAs || js.length < 2 ? '' : needsCheck(clientId)
+    ? ' · <button class="link-btn warn" id="renumBtn">회기 기록 확인 필요 · 정리하기</button>'
     : ' · <button class="link-btn quiet" id="renumBtn">회기 번호 정리</button>';
   return `상담 ${js.length}회${ago !== null ? ` · 마지막 상담 ${ago <= 0 ? '오늘' : ago + '일 전'}` : ''}${fix}`;
 }
@@ -2234,7 +2285,7 @@ function renderSessRow(focusNum) {
 }
 // 같은 내담자에게 내용 앞부분이 같은 기록이 이미 있는지 (실수로 같은 회기를 두 번 저장하는 것 방지)
 function findSimilar(e) {
-  const key = (inp) => Object.values(inp || {}).filter((v) => typeof v === 'string').join('').replace(/\s+/g, '').slice(0, 60);
+  const key = bodyKey;   // 머리줄("1회기 7/28 15:00")은 빼고 비교
   const mine = key(e.inputs);
   if (mine.length < 10) return null;
   return clientRecords(e.clientId).find((r) => r.id !== e.id && r.type === e.type && key(r.inputs) === mine) || null;
