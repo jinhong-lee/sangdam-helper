@@ -273,6 +273,15 @@
   .rn-dup span { display: flex; flex-direction: column; }
   .rn-dup .link-btn { font-size: 12px; line-height: 16px; }
   .rn-top { margin: 0 0 8px; }
+  .drag-h { flex-shrink: 0; width: 24px; height: 40px; margin: 0 -8px 0 -8px; display: grid; place-items: center; border: 0; background: none; color: var(--text-2); opacity: .45; cursor: grab; border-radius: 4px; touch-action: none; }
+  .item:hover .drag-h, .drag-h:focus-visible { opacity: 1; }
+  .drag-h:active { cursor: grabbing; }
+  .item.dragging { position: relative; z-index: 5; box-shadow: var(--shadow-float, 0 8px 24px rgba(0,0,0,.12)); cursor: grabbing; transition: none; }
+  .it-warn { font-size: 12px; line-height: 16px; letter-spacing: 0px; color: var(--accent); white-space: nowrap; }
+  .list-sep { margin: 12px 0 0; font-size: 13px; line-height: 18px; letter-spacing: 0px; font-weight: 700; color: var(--text-2); }
+  .imp-head { display: flex; align-items: center; gap: 8px; }
+  .imp-no { flex-shrink: 0; min-width: 44px; font-weight: 700; font-size: 14px; line-height: 22px; letter-spacing: 0px; font-variant-numeric: tabular-nums; }
+  .imp-no:empty { display: none; }
   .rn-row s { color: var(--text-2); font-size: 13px; line-height: 18px; letter-spacing: 0px; }
   .file-link { cursor: pointer; margin-left: 4px; }
   .imp-list { display: grid; gap: 8px; margin-top: 12px; }
