@@ -474,6 +474,7 @@ function viewClient(id) {
       ${listHTML(list, false)}
     </div>`;
   bindProfileCard(c);
+  $('#flowWrap').onclick = (ev) => { if (ev.target.closest('#renumBtn')) openRenumber(id); };   // 요약 줄은 다시 그려지므로 바깥에 연결
   $('#moreBtn').onclick = () => toggleMenu($('#moreBtn'));
   const closeMenu = closeMenus;
   $('#renameBtn').onclick = async () => {
@@ -524,7 +525,14 @@ const PROFILE = [
     { k: 'tests', label: '검사 결과', multi: true, ph: '예) K-WISC-V 전체 IQ 95 (2026.09)' },
     { k: 'memo', label: '기타 기억할 것', multi: true, ph: '예) 시작 전 화장실 꼭 들르기, 모래 촉감 싫어함' },
   ] },
+  // 회기 번호 세는 방식: 기관·바우처마다 달라서 내담자마다 정함 (강미 2026-11-02). AI에는 보내지 않음.
+  { group: '회기 번호', note: '기관에 낼 때 쓰는 번호와 같게 맞춰 두면, 새 상담일지에 번호를 알아서 붙여요.', setting: true, fields: [
+    { k: 'sessMode', label: '세는 방식', type: 'select', none: '누적 (1, 2, 3 … 계속)', options: ['월별 (매달 1부터)'] },
+    { k: 'sessCap', label: '한 달 회기 수', ph: '예) 4 · 월별일 때 넘으면 알려드려요', numeric: true },
+    { k: 'intake', label: '초기상담', type: 'select', none: '1회기로 셈', options: ['따로 셈 (다음 회기가 1회기)'] },
+  ] },
 ];
+const SETTING_KEYS = PROFILE.filter((g) => g.setting).flatMap((g) => g.fields.map((f) => f.k));
 const PF_ALL = PROFILE.flatMap((g) => g.fields);
 const PF = Object.fromEntries(PF_ALL.map((f) => [f.k, f]));
 const pval = (c, k) => ((k === 'memo' ? c?.memo : c?.profile?.[k]) || '').trim();
@@ -552,7 +560,119 @@ const detailFields = (c) => PF_ALL.filter((f) => !SUMMARY_KEYS.includes(f.k) && 
 // AI·관리자·내보내기용 텍스트
 function profileText(c) {
   if (!c) return '';
-  return PF_ALL.filter((f) => pval(c, f.k)).map((f) => `${f.label}: ${fieldText(c, f)}`).join('\n');
+  return PF_ALL.filter((f) => !SETTING_KEYS.includes(f.k) && pval(c, f.k)).map((f) => `${f.label}: ${fieldText(c, f)}`).join('\n');
+}
+
+// ---------- 회기 번호 ----------
+// 번호는 지금처럼 제목 맨 앞("3회기 · 26.10.03 16:00", "초기상담 · …", "1회기 · 초기상담 · …")에 두고,
+// 작성 화면의 회기 칸이 그 앞부분만 고침 → 예전 기록·목록·내보내기·중복 확인이 그대로 동작.
+const INTAKE_RE = /초기\s*상담/;
+const SESS_PREFIX_RE = /^\s*(?:초기\s*상담|\d{1,3}\s*회기)(?:\s*·\s*(?:초기\s*상담|\d{1,3}\s*회기))?\s*(?:·\s*)?/;
+const numOf = (r) => parseHeader(r?.title || '').n;
+const isIntake = (r) => INTAKE_RE.test((r?.title || '').match(SESS_PREFIX_RE)?.[0] || '');
+function numberingOf(clientId) {
+  const p = clients.find((c) => c.id === clientId)?.profile || {};
+  return { monthly: /월별/.test(p.sessMode || ''), cap: parseInt(p.sessCap, 10) || 0, intakeSep: /따로/.test(p.intake || '') };
+}
+const sameMonth = (a, b) => { const x = new Date(a), y = new Date(b); return x.getFullYear() === y.getFullYear() && x.getMonth() === y.getMonth(); };
+const countsAsSession = (r, nb) => !(nb.intakeSep && isIntake(r));
+// 상담일 ts에 들어갈 자동 번호: 그 앞의 마지막 번호 + 1 (월별이면 같은 달 안에서). 앞 기록 번호를 직접 고쳐뒀으면 그걸 이어감.
+function autoSessionNo(clientId, ts, excludeId) {
+  const nb = numberingOf(clientId);
+  let list = clientRecords(clientId).filter((r) => r.type === 'journal' && r.id !== excludeId && countsAsSession(r, nb) && chronoOf(r) <= ts)
+    .sort((a, b) => chronoOf(a) - chronoOf(b) || writtenOf(a) - writtenOf(b));
+  if (nb.monthly) list = list.filter((r) => sameMonth(chronoOf(r), ts));
+  for (let i = list.length - 1; i >= 0; i--) { const n = numOf(list[i]); if (n) return n + (list.length - 1 - i) + 1; }
+  return list.length + 1;
+}
+function sessLabel(n, intake, clientId) {
+  if (intake) return numberingOf(clientId).intakeSep || !n ? '초기상담' : `${n}회기 · 초기상담`;
+  return n ? `${n}회기` : '';
+}
+function retitle(title, label) {
+  const rest = (title || '').replace(SESS_PREFIX_RE, '').trim();
+  return [label, rest].filter(Boolean).join(' · ') || '상담일지';
+}
+// 월별 기준에서 한 달 회기 수를 넘었는지 → 경고 문구
+function capWarn(clientId, n, intake) {
+  const nb = numberingOf(clientId);
+  if (!nb.monthly || !nb.cap || !n || (intake && nb.intakeSep) || n <= nb.cap) return '';
+  return `이번 달 ${n}번째 회기예요 (월 ${nb.cap}회 기준). 보강이면 번호를 직접 고쳐주세요.`;
+}
+// 기존 기록 번호 정리: 상담일 순서대로 다시 매긴 번호(바뀌는 것만)
+function renumberPlan(clientId) {
+  const nb = numberingOf(clientId);
+  const list = clientRecords(clientId).filter((r) => r.type === 'journal').sort((a, b) => chronoOf(a) - chronoOf(b) || writtenOf(a) - writtenOf(b));
+  const out = []; let n = 0, month = null;
+  for (const r of list) {
+    const t = chronoOf(r), intake = isIntake(r);
+    if (nb.monthly && (month === null || !sameMonth(month, t))) { n = 0; month = t; }
+    const counted = countsAsSession(r, nb);
+    if (counted) n++;
+    const title = retitle(r.title, sessLabel(counted ? n : null, intake, clientId));
+    if (title !== r.title) out.push({ r, from: r.title, to: title });
+  }
+  return out;
+}
+const dupNumbers = (clientId) => {
+  const nb = numberingOf(clientId), seen = new Map();
+  clientRecords(clientId).filter((r) => r.type === 'journal' && countsAsSession(r, nb) && numOf(r)).forEach((r) => {
+    const k = (nb.monthly ? fmtDay(chronoOf(r)).slice(0, 5) + ':' : '') + numOf(r);
+    seen.set(k, (seen.get(k) || 0) + 1);
+  });
+  return [...seen.values()].some((v) => v > 1);
+};
+async function openRenumber(clientId) {
+  const plan = renumberPlan(clientId);
+  const nb = numberingOf(clientId);
+  const opener = document.activeElement;
+  const back = document.createElement('div');
+  back.className = 'modal-back';
+  back.innerHTML = `
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="rnTitle">
+      <div class="modal-body">
+        <h3 id="rnTitle">회기 번호 정리</h3>
+        <p class="sub">상담일 순서대로 ${nb.monthly ? '매달 1부터' : '1부터 누적으로'} 다시 매겨요${nb.intakeSep ? ' (초기상담은 번호 없이)' : ''}. 세는 방식은 내담자 정보에서 바꿀 수 있어요.</p>
+        ${plan.length ? `
+          <div class="row" style="margin:-4px 0 6px"><button class="link-btn" data-all>모두 선택</button><button class="link-btn" data-none>모두 해제</button></div>
+          <div class="rn-list">${plan.map((p, i) => `
+            <label class="check rn-row">
+              <input type="checkbox" data-i="${i}" checked>
+              <span><s>${esc(p.from)}</s><b>${esc(p.to)}</b></span>
+            </label>`).join('')}</div>
+          <p class="hint-line">직접 고쳐둔 번호(다른 기관에서 이어 온 회기 등)는 체크를 해제하면 그대로 둬요.</p>`
+        : '<p class="sub" style="margin:0">모든 번호가 이미 상담일 순서와 맞아요.</p>'}
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" data-cancel>${plan.length ? '취소' : '닫기'}</button>
+        ${plan.length ? '<button class="btn" data-ok></button>' : ''}
+      </div>
+    </div>`;
+  document.body.appendChild(back);
+  const checks = [...back.querySelectorAll('[data-i]')], ok = back.querySelector('[data-ok]');
+  const sync = () => { if (!ok) return; const n = checks.filter((c) => c.checked).length; ok.disabled = !n; ok.textContent = n ? `${n}건 번호 바꾸기` : '바꿀 기록을 고르세요'; };
+  const done = () => { document.removeEventListener('keydown', onKey); back.remove(); opener?.focus?.(); };
+  const onKey = (ev) => { if (ev.key === 'Escape') done(); };
+  document.addEventListener('keydown', onKey);
+  back.querySelector('[data-cancel]').onclick = done;
+  back.onclick = (ev) => { if (ev.target === back) done(); };
+  back.querySelector('[data-all]')?.addEventListener('click', () => { checks.forEach((c) => (c.checked = true)); sync(); });
+  back.querySelector('[data-none]')?.addEventListener('click', () => { checks.forEach((c) => (c.checked = false)); sync(); });
+  checks.forEach((c) => (c.onchange = sync));
+  sync();
+  if (ok) ok.onclick = async () => {
+    const picks = checks.filter((c) => c.checked).map((c) => plan[+c.dataset.i]);
+    ok.disabled = true; ok.textContent = '바꾸는 중…';
+    const now = Date.now();
+    try {
+      await commitOps(picks.map((p) => (b) => b.update(userDoc('records', p.r.id), { title: p.to, updatedAt: now })));
+      picks.forEach((p) => { p.r.title = p.to; p.r.updatedAt = now; });
+      done(); toast(`회기 번호 ${picks.length}건을 바꿨어요`);
+      if (location.hash === '#/c/' + clientId) viewClient(clientId);
+      renderNav();
+    } catch { toast('바꾸지 못했어요. 인터넷 연결을 확인해 주세요.'); sync(); }
+  };
+  (ok || back.querySelector('[data-cancel]')).focus();
 }
 
 function profileCardHTML(c) {
@@ -591,10 +711,10 @@ function openProfileModal(c) {
     const v = pval(c, f.k);
     const val = f.type === 'date' ? v.replace(/-/g, '') : v;
     const input = f.type === 'select'
-      ? `<select id="pf_${f.k}" data-k="${f.k}"><option value="">선택 안 함</option>${f.options.map((o) => `<option ${o === v ? 'selected' : ''}>${o}</option>`).join('')}</select>`
+      ? `<select id="pf_${f.k}" data-k="${f.k}"><option value="">${f.none || '선택 안 함'}</option>${f.options.map((o) => `<option ${o === v ? 'selected' : ''}>${o}</option>`).join('')}</select>`
       : f.multi
         ? `<textarea id="pf_${f.k}" data-k="${f.k}" rows="1" placeholder="${esc(f.ph)}">${esc(val)}</textarea>`
-        : `<input type="text" id="pf_${f.k}" data-k="${f.k}" value="${esc(val)}" placeholder="${esc(f.ph)}" autocomplete="off" ${f.type === 'date' ? 'inputmode="numeric" maxlength="10"' : 'maxlength="60"'}>`;
+        : `<input type="text" id="pf_${f.k}" data-k="${f.k}" value="${esc(val)}" placeholder="${esc(f.ph)}" autocomplete="off" ${f.type === 'date' ? 'inputmode="numeric" maxlength="10"' : f.numeric ? 'inputmode="numeric" maxlength="2"' : 'maxlength="60"'}>`;
     return `<div class="pf-field">
       <label for="pf_${f.k}">${f.label}${f.type === 'date' ? `<span class="pf-hint" data-hint="${f.k}"></span>` : ''}</label>${input}</div>`;
   };
@@ -611,7 +731,7 @@ function openProfileModal(c) {
           <b>상담사가 계속 기억해야 할 정보</b>
           적어둔 정보는 상담일지·사례 분석을 만들 때 AI가 함께 참고해요. 모르는 칸은 비워두세요.
         </div>
-        ${PROFILE.map((g, i) => `${i ? `<h4 class="pf-group-title">${g.group}</h4>` : ''}<div class="pf-group">${g.fields.map(fieldHTML).join('')}</div>`).join('')}
+        ${PROFILE.map((g, i) => `${i ? `<h4 class="pf-group-title">${g.group}</h4>` : ''}${g.note ? `<p class="hint-line pf-group-note">${g.note}</p>` : ''}<div class="pf-group">${g.fields.map(fieldHTML).join('')}</div>`).join('')}
       </div>
       <div class="pf-actions">
         <p class="field-error" id="pfErr" hidden></p>
@@ -648,9 +768,11 @@ function openProfileModal(c) {
     const out = {}, bad = [];
     els.forEach((e) => {
       const f = PF[e.dataset.k], v = e.value.trim();
-      if (f.type === 'date' && v) { const d = parseDate8(v); if (!d) bad.push(f.label); out[f.k] = d || ''; } else out[f.k] = v;
+      if (f.type === 'date' && v) { const d = parseDate8(v); if (!d) bad.push(f.label); out[f.k] = d || ''; }
+      else if (f.numeric && v) { const n = parseInt(v, 10); if (!(n > 0 && n < 100)) bad.push(f.label); out[f.k] = n > 0 ? String(n) : ''; }
+      else out[f.k] = v;
     });
-    if (bad.length) { err.textContent = `${bad.join(', ')}: 날짜를 20180305처럼 8자리 숫자로 적어주세요.`; err.hidden = false; return; }
+    if (bad.length) { err.textContent = `${bad.join(', ')}: ${bad.some((b) => PF_ALL.find((f) => f.label === b)?.numeric) ? '숫자로 적어주세요(예: 4).' : '날짜를 20180305처럼 8자리 숫자로 적어주세요.'}`; err.hidden = false; return; }
     const { memo, ...profile } = out;
     ok.disabled = true; ok.textContent = '저장 중…'; err.hidden = true;
     try {
@@ -727,7 +849,10 @@ function flowHTML(clientId) {
   if (!js.length) return '';
   const lastT = Math.max(0, ...js.map(sessionOf).filter(Boolean));
   const ago = lastT ? Math.floor((Date.now() - lastT) / 864e5) : null;
-  return `상담 ${js.length}회${ago !== null ? ` · 마지막 상담 ${ago <= 0 ? '오늘' : ago + '일 전'}` : ''}`;
+  const fix = viewAs || js.length < 2 ? '' : dupNumbers(clientId)
+    ? ' · <button class="link-btn warn" id="renumBtn">회기 번호가 겹쳐요 · 정리하기</button>'
+    : ' · <button class="link-btn quiet" id="renumBtn">회기 번호 정리</button>';
+  return `상담 ${js.length}회${ago !== null ? ` · 마지막 상담 ${ago <= 0 ? '오늘' : ago + '일 전'}` : ''}${fix}`;
 }
 
 // ---------- 기록 목록 ----------
@@ -744,10 +869,10 @@ const ICON = {
 };
 const shortDay = fmtDay;
 const picked = () => sel?.ids || new Set();
-// 목록 정렬: 최근 작성순(기본) / 상담일순. 상담일 = 제목의 회기 날짜·시간, 없으면 작성일. 회기 번호는 바꾸지 않음.
-const SORTS = { recent: '최근 작성순', sessionDesc: '상담일 최신순', sessionAsc: '상담일 오래된순' };
+// 목록 정렬: 상담일 최신순(기본, 강미 2026-11-02 — 결과를 만들거나 몰아 쓴 기록이 위로 튀지 않게) / 상담일 오래된순 / 최근 작성순. 상담일 = 제목의 회기 날짜·시간, 없으면 작성일. 회기 번호는 바꾸지 않음.
+const SORTS = { sessionDesc: '상담일 최신순', sessionAsc: '상담일 오래된순', recent: '최근 작성순' };
 function sortList(list) {
-  const k = SORTS[prefs.listSort] ? prefs.listSort : 'recent';
+  const k = SORTS[prefs.listSort] ? prefs.listSort : 'sessionDesc';
   const a = list.slice();
   if (k === 'recent') return a.sort((x, y) => writtenOf(y) - writtenOf(x));
   return a.sort((x, y) => (k === 'sessionAsc' ? 1 : -1) * (chronoOf(x) - chronoOf(y) || writtenOf(x) - writtenOf(y)));
@@ -763,7 +888,7 @@ function listInner() {
       <input type="checkbox" id="selAll" ${all ? 'checked' : ''} data-mixed="${n && !all ? 1 : 0}" aria-label="${all ? '전체 해제' : '전체 선택'}">
       <span>총 ${list.length}건</span>
     </label>
-    ${!n ? `<label class="sort-wrap"><span class="sr-only">정렬</span><select id="listSort" class="sort-select">${Object.entries(SORTS).map(([k, t]) => `<option value="${k}" ${(prefs.listSort || 'recent') === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>` : ''}
+    ${!n ? `<label class="sort-wrap"><span class="sr-only">정렬</span><select id="listSort" class="sort-select">${Object.entries(SORTS).map(([k, t]) => `<option value="${k}" ${(prefs.listSort || 'sessionDesc') === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>` : ''}
     ${n ? `<div class="row bar-actions">
       <span class="bar-count" aria-live="polite"><b>${n}</b>건 선택</span>
       <button class="btn" id="selGen">결과 만들기</button>
@@ -1916,7 +2041,7 @@ $('#batchDockClose').onclick = dismissBatch;
 // ---------- 작성 · 수정 화면 ----------
 function nowStamp() { return fmtDate(Date.now()); }
 function defaultTitle(clientId, type) {
-  if (type === 'journal') return `${clientRecords(clientId).filter((r) => r.type === 'journal').length + 1}회기 · ${nowStamp()}`;
+  if (type === 'journal') return `${autoSessionNo(clientId, Date.now())}회기 · ${nowStamp()}`;
   return nowStamp();
 }
 
@@ -1952,6 +2077,7 @@ function openEditor(src) {
     clientId: src.clientId,
     type,
     title: src.title || defaultTitle(src.clientId, type),
+    sess: type === 'journal' ? initSess(src) : null,   // 회기 칸: { n, intake, manual, fromText }
     inputs: normInputs(type, src.inputs),
     mode: null,
     lenses: src.lenses || prefs['lenses_' + type] || manifest.lenses.filter((l) => l[type]).map((l) => l.id),
@@ -1990,6 +2116,7 @@ function renderEditorBody() {
     ${editForm ? '' : `<p class="sub">${sentence
       ? (e.type === 'journal' ? '회기마다 첫 줄에 "N회기 날짜 시간"을 적어주세요. 여러 회기를 한꺼번에 넣으면 회기별로 나눠 저장해요.' : '아는 내용을 편하게 적어주세요. AI가 항목별로 나눠 분석해요.')
       : '아는 항목만 짧게 적어주세요. 빈 칸은 건너뛰어요.'}</p>`}
+    ${e.sess ? '<div class="sess-row" id="sessRow"></div>' : ''}
     ${autoTitle ? '' : `<div class="field">
       <label for="title">제목</label>
       <input type="text" id="title" value="${esc(e.title)}">
@@ -1999,10 +2126,19 @@ function renderEditorBody() {
         <label for="f${i}">${esc(f.label)}</label>
         <textarea id="f${i}" class="${f.free ? 'free' : ''}" data-label="${esc(f.label)}" placeholder="${esc(editForm && f.free ? EDIT_HINT[e.type] : (f.hint || ''))}">${esc(e.inputs[f.label] || '')}</textarea>
       </div>`).join('')}`;
-  if ($('#title')) $('#title').oninput = (ev) => { e.title = ev.target.value; markDirty(true); };
+  if ($('#title')) $('#title').oninput = (ev) => {
+    e.title = ev.target.value; markDirty(true);
+    const pre = e.sess && e.title.match(SESS_PREFIX_RE);   // 제목 앞 "N회기"를 직접 고치면 회기 칸도 따라감
+    if (pre) { Object.assign(e.sess, { n: parseHeader(pre[0]).n, intake: INTAKE_RE.test(pre[0]), manual: true, fromText: false }); renderSessRow(false); }
+  };
   host.querySelectorAll('textarea[data-label]').forEach((t) => {
-    t.oninput = () => { e.inputs[t.dataset.label] = t.value; markDirty(true); if (t.classList.contains('free')) updateSplitHint(); };
+    t.oninput = () => {
+      e.inputs[t.dataset.label] = t.value; markDirty(true);
+      if (t.classList.contains('free')) { updateSplitHint(); if (autoTitle && e.sess) { syncSessFromText(e); renderSessRow(false); } }
+    };
   });
+  if (autoTitle && e.sess) syncSessFromText(e);
+  renderSessRow(false);
   if (canSplit(e)) {
     host.querySelector('textarea.free').insertAdjacentHTML('afterend', '<div class="split-hint" id="splitHint" aria-live="polite"></div>');
     updateSplitHint();
@@ -2029,9 +2165,72 @@ function startSplit(autoGen) {
 }
 // 회기가 하나면 첫 줄의 "N회기 날짜 시간"으로 제목을 만듦
 function applyAutoTitle(e) {
-  if (!(e.type === 'journal' && e.mode === 'sentence') || isEditForm(e)) return;   // 수정 중엔 사용자가 고친 제목 유지
+  if (e.type !== 'journal') return;
+  if (e.mode === 'sentence' && !isEditForm(e)) {   // 수정 중엔 사용자가 고친 제목 유지
+    const r = splitByRule((e.inputs[freeField('journal').label] || '').trim());
+    if (r.sessions.length === 1 && /회기/.test(r.sessions[0].title)) e.title = r.sessions[0].title;
+  }
+  if (e.sess) e.title = withSess(e);
+}
+const withSess = (e) => retitle(e.title, sessLabel(e.sess.n, e.sess.intake, e.clientId));
+
+// ---------- 작성 화면 회기 칸 ----------
+// 새 기록: 자동 번호(내담자 정보의 세는 방식 기준). 저장된 기록: 제목의 번호를 그대로(직접 입력으로 취급).
+function initSess(src) {
+  if (src.id || src.title) return { n: parseHeader(src.title || '').n, intake: isIntake(src), manual: true, fromText: false };
+  return { n: autoSessionNo(src.clientId, Date.now()), intake: false, manual: false, fromText: false };
+}
+// 이 기록의 상담일: 제목(또는 문장 쓰기 첫 줄)의 날짜, 없으면 지금
+function editorTs(e) {
+  let t = parseHeader(e.title || '').ts;
+  if (e.mode === 'sentence' && !isEditForm(e)) {
+    const r = splitByRule((e.inputs[freeField('journal').label] || '').trim());
+    if (r.sessions.length === 1) t = parseHeader(r.sessions[0].title).ts || null;
+  }
+  return t || (e.id ? writtenOf(records.find((r) => r.id === e.id) || {}) : 0) || Date.now();
+}
+// 문장 쓰기 첫 줄에 "N회기"를 적었으면 그 번호를 쓰고, 지우면 다시 자동으로
+function syncSessFromText(e) {
   const r = splitByRule((e.inputs[freeField('journal').label] || '').trim());
-  if (r.sessions.length === 1 && /회기/.test(r.sessions[0].title)) e.title = r.sessions[0].title;
+  const n = r.sessions.length === 1 ? parseHeader(r.sessions[0].title).n : null;
+  if (n) Object.assign(e.sess, { n, manual: true, fromText: true });
+  else if (e.sess.fromText) Object.assign(e.sess, { manual: false, fromText: false });
+  if (!e.sess.manual) e.sess.n = autoSessionNo(e.clientId, editorTs(e), e.id);
+}
+function renderSessRow(focusNum) {
+  const e = editor, row = $('#sessRow'); if (!e?.sess || !row) return;
+  const s = e.sess, nb = numberingOf(e.clientId);
+  const noNum = s.intake && nb.intakeSep;
+  row.hidden = canSplit(e) && sessionCount(e) >= 2;   // 여러 회기를 한꺼번에 넣으면 회기별 미리보기에서 정함
+  const how = nb.monthly ? '월별' : '누적';
+  const note = noNum ? '초기상담은 번호 없이 저장해요'
+    : s.manual ? `${s.fromText ? '내용 첫 줄의 번호' : '직접 입력'} · <button type="button" class="link-btn" id="sessAuto">자동 번호로</button>`
+    : `자동 · ${how} 기준`;
+  const warn = capWarn(e.clientId, s.n, s.intake);
+  row.innerHTML = `
+    <span class="sess-label" id="sessLbl">회기 번호</span>
+    <span class="sess-num" ${noNum ? 'hidden' : ''}><input type="text" id="sessNo" inputmode="numeric" maxlength="3" value="${s.n || ''}" aria-labelledby="sessLbl" aria-describedby="sessNote"><span>회기</span></span>
+    <label class="check sess-intake"><input type="checkbox" id="sessIntake" ${s.intake ? 'checked' : ''}><span>초기상담</span></label>
+    <span class="sess-note" id="sessNote">${note}</span>
+    ${warn ? `<p class="hint-line warn sess-warn">${warn}</p>` : ''}`;
+  const changed = () => {
+    markDirty(true);
+    if ($('#title')) { e.title = withSess(e); $('#title').value = e.title; }
+  };
+  $('#sessNo').oninput = (ev) => {
+    const v = ev.target.value.replace(/\D/g, ''); if (v !== ev.target.value) ev.target.value = v;
+    Object.assign(s, { n: v ? +v : null, manual: true, fromText: false });
+    changed();
+    const w = capWarn(e.clientId, s.n, s.intake), note = $('#sessNote');
+    note.innerHTML = `직접 입력 · <button type="button" class="link-btn" id="sessAuto">자동 번호로</button>`;
+    on('#sessAuto', 'click', toAuto);
+    row.querySelector('.sess-warn')?.remove();
+    if (w) row.insertAdjacentHTML('beforeend', `<p class="hint-line warn sess-warn">${w}</p>`);
+  };
+  $('#sessIntake').onchange = (ev) => { s.intake = ev.target.checked; if (!s.manual) s.n = autoSessionNo(e.clientId, editorTs(e), e.id); changed(); renderSessRow(); };
+  const toAuto = () => { Object.assign(s, { manual: false, fromText: false, n: autoSessionNo(e.clientId, editorTs(e), e.id) }); changed(); renderSessRow(true); };
+  on('#sessAuto', 'click', toAuto);
+  if (focusNum) $('#sessNo')?.focus();
 }
 // 같은 내담자에게 내용 앞부분이 같은 기록이 이미 있는지 (실수로 같은 회기를 두 번 저장하는 것 방지)
 function findSimilar(e) {
@@ -2336,7 +2535,7 @@ async function doSave(e, silent, byUser) {
   if (editor === e && e.editingResult) { const t = $('#resultEdit'); if (t) e.result = t.value; }
   const rev = e.rev || 0;
   const data = {
-    clientId: e.clientId, type: e.type, title: e.title.trim() || defaultTitle(e.clientId, e.type),
+    clientId: e.clientId, type: e.type, title: (e.sess ? withSess(e) : e.title).trim() || defaultTitle(e.clientId, e.type),
     inputs: e.inputs, mode: e.mode, lenses: e.lenses, useHistory: e.useHistory, result: e.result, updatedAt: Date.now(),
   };
   if (e.id && byUser) data.editedAt = Date.now();   // 저장된 기록을 사람이 고쳐 저장한 경우만 "수정"
@@ -2352,6 +2551,7 @@ async function doSave(e, silent, byUser) {
       records.unshift({ id: ref.id, ...data });
       if (editor === e) setHashSilently('#/r/' + ref.id);
     }
+    e.title = data.title;
     if ((e.rev || 0) === rev) { e.dirty = false; setSaveState(e, 'saved'); }
     if (!silent) toast('저장했어요');
     renderNav();

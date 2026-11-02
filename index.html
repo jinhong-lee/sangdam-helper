@@ -249,6 +249,25 @@
   .bulk-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
   .hint-line { font-size: 12px; line-height: 16px; letter-spacing: 0px; color: var(--text-2); margin: 8px 0 0; }
   .hint-line.warn { color: var(--accent); }
+  /* 작성 화면 회기 칸 */
+  .sess-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 0 0 16px; }
+  .sess-row[hidden] { display: none; }
+  .sess-label { font-weight: 700; font-size: 14px; line-height: 22px; letter-spacing: 0px; }
+  .sess-num { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; line-height: 22px; letter-spacing: 0px; }
+  .sess-num[hidden] { display: none; }
+  .sess-num input[type="text"] { width: 56px; height: 32px; padding: 0 8px; text-align: center; font-variant-numeric: tabular-nums; }
+  .sess-intake { align-items: center; }
+  .sess-intake input { margin-top: 0; }
+  .sess-note { font-size: 12px; line-height: 16px; letter-spacing: 0px; color: var(--text-2); }
+  .sess-note .link-btn { font-size: 12px; line-height: 16px; }
+  .sess-warn { flex-basis: 100%; margin: 0; }
+  .link-btn.quiet { color: var(--text-2); }
+  .link-btn.warn { color: var(--accent); }
+  .client-meta .link-btn { font-size: 13px; line-height: 18px; }
+  .pf-group-note { margin: -4px 0 8px; }
+  .rn-list { display: flex; flex-direction: column; gap: 8px; max-height: 50vh; overflow: auto; margin: 4px 0 0; }
+  .rn-row span { display: flex; flex-direction: column; font-variant-numeric: tabular-nums; }
+  .rn-row s { color: var(--text-2); font-size: 13px; line-height: 18px; letter-spacing: 0px; }
   .file-link { cursor: pointer; margin-left: 4px; }
   .imp-list { display: grid; gap: 8px; margin-top: 12px; }
   .imp-row { display: flex; gap: 8px; align-items: flex-start; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
