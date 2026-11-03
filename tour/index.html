@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="상담 끝나고 몇 줄만 적으면 상담일지가 완성되는 농지니, 사용 순서 4단계">
+<meta property="og:title" content="농지니 둘러보기">
+<meta property="og:description" content="상담 끝나고 몇 줄만 적으면, 상담일지가 완성돼요">
+<meta property="og:image" content="https://jinhong-lee.github.io/sangdam-helper/og-image.png">
+<link rel="icon" href="../favicon.svg">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<title>농지니 둘러보기</title>
+<style>
+  /* 레이아웃: 위에서 아래로 한 줄. 단계 = 설명 + 실제 화면 캡처 + 누를 곳 표시, 단계 사이는 아래 화살표 */
+  :root {
+    --bg: #F6F4F0; --card: #FFFFFF; --ink: #23211E; --ink-2: #6B665E; --line: #E3DED5;
+    --green: #2F5D50; --green-soft: #E3EDE9; --tap: #E2703A; --tap-soft: rgba(226,112,58,.18); --on-tap: #FFFFFF;
+    --font: "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #161816; --card: #1F2220; --ink: #ECE9E3; --ink-2: #A39E95; --line: #343935;
+    --green: #7FB8A6; --green-soft: #23332E; --tap: #F08A55; --tap-soft: rgba(240,138,85,.22); --on-tap: #1A120D; color-scheme: dark; } }
+  :root[data-theme="dark"] {
+    --bg: #161816; --card: #1F2220; --ink: #ECE9E3; --ink-2: #A39E95; --line: #343935;
+    --green: #7FB8A6; --green-soft: #23332E; --tap: #F08A55; --tap-soft: rgba(240,138,85,.22); --on-tap: #1A120D; color-scheme: dark; }
+
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 17px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 880px; margin: 0 auto; padding-block: 48px 72px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 0; }
+
+  header { display: grid; gap: 12px; margin-bottom: 36px; }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 20px; }
+  .logo svg { width: 36px; height: 36px; flex-shrink: 0; }
+  h1 { margin: 0; font-size: clamp(28px, 6vw, 40px); line-height: 1.25; letter-spacing: -0.03em; font-weight: 800; text-wrap: balance; }
+  .lead { margin: 0; color: var(--ink-2); font-size: 18px; max-width: 34em; }
+  .legend { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 15px; color: var(--ink-2); }
+  .legend .dot { position: static; transform: none; width: 26px; height: 26px; font-size: 13px; animation: none; }
+
+  .step { display: grid; gap: 16px; }
+  .step-head { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: start; }
+  .num { width: 40px; height: 40px; border-radius: 50%; background: var(--green); color: var(--card); display: grid; place-items: center; font-weight: 800; font-size: 18px; }
+  .step h2 { margin: 4px 0 4px; font-size: 22px; line-height: 1.35; letter-spacing: -0.02em; text-wrap: balance; }
+  .step p { margin: 0; color: var(--ink-2); }
+
+  .shot { position: relative; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); background: var(--card); box-shadow: 0 1px 2px rgba(0,0,0,.05), 0 12px 32px -16px rgba(0,0,0,.25); }
+  .shot img { display: block; width: 100%; height: auto; }
+  .dot { position: absolute; transform: translate(-50%, -50%); width: 34px; height: 34px; border-radius: 50%; background: var(--tap); color: var(--on-tap); display: grid; place-items: center; font-weight: 800; font-size: 15px; box-shadow: 0 0 0 6px var(--tap-soft), 0 4px 10px rgba(0,0,0,.25); animation: pulse 1.8s ease-out infinite; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 var(--tap-soft), 0 4px 10px rgba(0,0,0,.25); } 70% { box-shadow: 0 0 0 14px transparent, 0 4px 10px rgba(0,0,0,.25); } 100% { box-shadow: 0 0 0 0 transparent, 0 4px 10px rgba(0,0,0,.25); } }
+  @media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
+
+  .taps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .taps li { display: grid; grid-template-columns: 26px 1fr; gap: 10px; align-items: start; }
+  .taps .k { width: 26px; height: 26px; border-radius: 50%; background: var(--tap); color: var(--on-tap); display: grid; place-items: center; font-weight: 800; font-size: 13px; margin-top: 2px; }
+  .taps b { color: var(--ink); }
+  .taps span { color: var(--ink-2); }
+
+  .next { display: grid; justify-items: center; gap: 2px; padding-block: 18px; color: var(--green); font-weight: 700; font-size: 15px; }
+  .next svg { width: 28px; height: 40px; }
+
+  .done { margin-top: 36px; display: grid; grid-template-columns: minmax(0, 1fr) 200px; gap: 28px; align-items: center; background: var(--green-soft); border-radius: 18px; padding: 28px; }
+  .done h2 { margin: 0 0 8px; font-size: 22px; letter-spacing: -0.02em; }
+  .done ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+  .done .phone { border-radius: 18px; overflow: hidden; border: 1px solid var(--line); box-shadow: 0 12px 28px -14px rgba(0,0,0,.35); }
+  .done .phone img { display: block; width: 100%; max-height: 400px; object-fit: cover; object-position: top; }
+  .note { margin-top: 20px; font-size: 14px; color: var(--ink-2); text-align: center; }
+
+  @media (max-width: 640px) {
+    body { font-size: 16px; }
+    .wrap { padding-block: 32px 56px; }
+    .dot { width: 26px; height: 26px; font-size: 12px; box-shadow: 0 0 0 4px var(--tap-soft), 0 3px 8px rgba(0,0,0,.25); }
+    .done { grid-template-columns: 1fr; padding: 22px; }
+    .done .phone { max-width: 220px; justify-self: center; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="logo">
+      <svg viewBox="0 0 48 48" aria-hidden="true"><rect width="48" height="48" rx="12" fill="#2F5D50"/><path d="M14 13h20a3 3 0 0 1 3 3v13a3 3 0 0 1-3 3H22l-6 5v-5h-2a3 3 0 0 1-3-3V16a3 3 0 0 1 3-3z" fill="#F6F4F0"/><path d="M24 29v-8" stroke="#2F5D50" stroke-width="2.4" stroke-linecap="round"/><path d="M24 22c0-4 3-6 6-6 0 4-3 6-6 6z" fill="#2F5D50"/><path d="M24 23c0-3-2.5-4.5-5-4.5 0 3 2.5 4.5 5 4.5z" fill="#B9784A"/></svg>
+      농지니
+    </div>
+    <h1>상담 끝나고 몇 줄만 적으면, 상담일지가 완성돼요</h1>
+    <p class="lead">아동 상담 선생님을 위한 기록 앱이에요. 가입 없이 화면으로 먼저 구경해 보세요. 사용 순서는 딱 4단계예요.</p>
+    <div class="legend"><span class="dot" aria-hidden="true">1</span> 주황 동그라미가 누르는 곳이에요</div>
+  </header>
+
+  <section class="step" aria-labelledby="s1">
+    <div class="step-head"><div class="num">1</div><div><h2 id="s1">구글 계정으로 들어가요</h2><p>회원가입 양식은 없어요. 버튼 한 번이면 끝.</p></div></div>
+    <div class="shot">
+      <img src="img/1-login.jpg" alt="농지니 첫 화면. 가운데에 'Google 계정으로 로그인' 버튼이 있다" width="1600" height="1030">
+      <span class="dot" style="left:39%;top:53.3%" aria-hidden="true">1</span>
+    </div>
+    <ol class="taps">
+      <li><span class="k">1</span><div><b>Google 계정으로 로그인</b> <span>→ 내 기록 화면으로 바로 넘어가요</span></div></li>
+    </ol>
+  </section>
+
+  <div class="next" aria-hidden="true"><svg viewBox="0 0 28 40" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v34M5 27l9 9 9-9"/></svg></div>
+
+  <section class="step" aria-labelledby="s2">
+    <div class="step-head"><div class="num">2</div><div><h2 id="s2">아이를 고르고 ‘상담일지 쓰기’</h2><p>왼쪽에 내가 맡은 아이들이 있어요. 아이를 누르면 지금까지의 회기가 순서대로 보여요.</p></div></div>
+    <div class="shot">
+      <img src="img/3-client.jpg" alt="내담자 김도윤의 화면. 왼쪽에 아이 목록, 오른쪽에 1회기부터 4회기까지 기록 카드와 '상담일지 쓰기' 버튼" width="1600" height="1030">
+      <span class="dot" style="left:9%;top:20.2%" aria-hidden="true">1</span>
+      <span class="dot" style="left:81.8%;top:11.6%" aria-hidden="true">2</span>
+    </div>
+    <ol class="taps">
+      <li><span class="k">1</span><div><b>아이 이름</b> <span>→ 그 아이의 기록이 오른쪽에 모여요</span></div></li>
+      <li><span class="k">2</span><div><b>상담일지 쓰기</b> <span>→ 새 일지 쓰는 화면으로 가요</span></div></li>
+    </ol>
+  </section>
+
+  <div class="next" aria-hidden="true"><svg viewBox="0 0 28 40" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v34M5 27l9 9 9-9"/></svg></div>
+
+  <section class="step" aria-labelledby="s3">
+    <div class="step-head"><div class="num">3</div><div><h2 id="s3">오늘 있었던 일을 메모하듯 적어요</h2><p>문장이 엉성해도 괜찮아요. 몇 회기인지는 앱이 알아서 붙여 줘요.</p></div></div>
+    <div class="shot">
+      <img src="img/4-write.jpg" alt="일지 쓰기 화면. 큰 입력칸에 '점토로 집 만들기. 지붕이 자꾸 무너지자 다시 할래요 하고 혼자 고침' 같은 메모가 적혀 있다" width="1600" height="1030">
+      <span class="dot" style="left:61%;top:49.7%" aria-hidden="true">1</span>
+      <span class="dot" style="left:93.3%;top:10.6%" aria-hidden="true">2</span>
+    </div>
+    <ol class="taps">
+      <li><span class="k">1</span><div><b>회기 내용 칸</b> <span>→ 놀이한 것, 아이가 한 말을 그대로 적기</span></div></li>
+      <li><span class="k">2</span><div><b>상담일지 생성</b> <span>→ AI가 일지로 정리하기 시작해요 (30초쯤)</span></div></li>
+    </ol>
+  </section>
+
+  <div class="next" aria-hidden="true"><svg viewBox="0 0 28 40" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v34M5 27l9 9 9-9"/></svg></div>
+
+  <section class="step" aria-labelledby="s4">
+    <div class="step-head"><div class="num">4</div><div><h2 id="s4">일지 양식에 맞춰 정리된 걸 복사해요</h2><p>관찰한 행동, 아이의 말, 다음 회기 계획까지 칸별로 나눠 줘요. 그대로 기관 양식에 붙여 넣으면 끝.</p></div></div>
+    <div class="shot">
+      <img src="img/5-result.jpg" alt="완성된 상담일지. 회기 목표, 관찰한 행동, 아이의 말, 다음 회기 계획이 표로 정리되어 있다" width="1600" height="1491">
+      <span class="dot" style="left:60%;top:55%" aria-hidden="true">1</span>
+      <span class="dot" style="left:89.4%;top:29.5%" aria-hidden="true">2</span>
+    </div>
+    <ol class="taps">
+      <li><span class="k">1</span><div><b>정리된 상담일지</b> <span>→ 고칠 곳은 ‘수정’을 눌러 바로 고쳐요</span></div></li>
+      <li><span class="k">2</span><div><b>복사</b> <span>→ 한글·워드 문서에 붙여 넣기</span></div></li>
+    </ol>
+  </section>
+
+  <section class="done" aria-labelledby="s5">
+    <div>
+      <h2 id="s5">그 밖에 이런 것도 돼요</h2>
+      <ul>
+        <li>휴대폰에서도 똑같이 써요. 상담실 나오면서 바로 메모하기 좋아요.</li>
+        <li>회기가 쌓이면 ‘사례 분석 쓰기’로 그동안의 변화를 한 번에 정리해 줘요.</li>
+        <li>지난 회기 기록을 참고해서 쓰기 때문에, 아이의 흐름이 이어져요.</li>
+      </ul>
+    </div>
+    <div class="phone"><img src="img/6-mobile.jpg" alt="휴대폰 화면에서 본 농지니 기록 목록" width="390" height="760"></div>
+  </section>
+
+  <p class="note">화면 속 아이 이름과 기록은 모두 설명을 위해 지어낸 예시예요.</p>
+</div>
+
+<p class="note" style="margin-top:8px"><a href="../" style="color:var(--green)">농지니 열기</a></p>
+</body>
+</html>
