@@ -148,6 +148,7 @@ async function boot() {
     }
     $('#userMail').textContent = u.email || '';
     $('#adminLink').hidden = !isAdminUser();
+    if (isAdminUser()) loadFeedback().catch(() => {});   // 새 의견 수를 관리자 메뉴 뱃지에 바로 표시
     if (isAdminUser()) loadFeedback().catch(() => {});   // 보안 규칙 게시 전이면 조용히 넘어감
     show('#appView');
     route();
@@ -174,10 +175,15 @@ async function loadData() {
   const allR = rs.docs.map((d) => ({ id: d.id, ...d.data() }));
   const cutoff = Date.now() - TRASH_DAYS * 864e5;
   const expired = (x) => x.deletedAt && x.deletedAt < cutoff;
+  // 예전 상담일지: 제목 앞 "3회기 · …"를 떼어 회기 번호(sessionNo·intake)로 따로 저장. 번호는 적힌 그대로(다시 매기지 않음)
+  const legacy = allR.filter((r) => !expired(r) && r.type === 'journal' && !hasSessField(r));
+  const splits = legacy.map((r) => [r.id, { sessionNo: numOf(r), intake: isIntake(r), title: restTitle(r.title) }]);
   const ops = [
     ...allC.filter(expired).map((c) => (b) => b.delete(userDoc('clients', c.id))),
     ...allR.filter(expired).map((r) => (b) => b.delete(userDoc('records', r.id))),
+    ...splits.map(([id, to]) => (b) => b.update(userDoc('records', id), to)),
   ];
+  legacy.forEach((r, i) => Object.assign(r, splits[i][1]));
   if (ops.length) commitOps(ops).catch(() => {});   // 실패해도 다음에 열 때 다시 정리
   clients = allC.filter((c) => !c.deletedAt).sort((a, b) => a.name.localeCompare(b.name, 'ko'));
   records = allR.filter((r) => !r.deletedAt).sort((a, b) => writtenOf(b) - writtenOf(a));
@@ -565,7 +571,7 @@ function profileText(c) {
 
 // ---------- 회기 번호 ----------
 // 회기 번호는 제목과 분리된 값(records.sessionNo, records.intake). 제목에는 날짜·메모만.
-// 예전 기록은 제목 맨 앞 "3회기 · …"에서 읽고, '회기 번호 정리'에서 제목과 분리해 저장.
+// 예전 기록은 불러올 때(loadData) 제목 맨 앞 "3회기 · …"를 떼어 자동으로 분리 저장. 다른 사람 화면 보기에선 읽기만(제목에서 읽음).
 // 순서를 바꾸는 방법: 목록(회기 번호순)에서 끌기 → 번호 다시 계산(날짜는 그대로, 날짜와 어긋나면 표시).
 const INTAKE_RE = /초기\s*상담/;
 const SESS_PREFIX_RE = /^\s*(?:초기\s*상담|\d{1,3}\s*회기)(?:\s*·\s*(?:초기\s*상담|\d{1,3}\s*회기))?\s*(?:·\s*)?/;
@@ -665,7 +671,6 @@ function renumberPlan(clientId) {
   return out.sort((a, b) => a.t - b.t);
 }
 const needsCheck = (clientId) => dupNumbers(clientId) || renumberPlan(clientId).some((p) => p.dup || p.dateFix || p.flip);
-const hasLegacy = (clientId) => clientRecords(clientId).some((r) => r.type === 'journal' && !hasSessField(r));
 const dupNumbers = (clientId) => {
   const nb = numberingOf(clientId), seen = new Map();
   clientRecords(clientId).filter((r) => r.type === 'journal' && countsAsSession(r, nb) && numOf(r)).forEach((r) => {
@@ -915,7 +920,6 @@ function flowHTML(clientId) {
   const ago = lastT ? Math.floor((Date.now() - lastT) / 864e5) : null;
   const fix = viewAs || js.length < 2 ? '' : needsCheck(clientId)
     ? ' · <button class="link-btn warn" id="renumBtn">회기 기록 확인 필요 · 정리하기</button>'
-    : hasLegacy(clientId) ? ' · <button class="link-btn" id="renumBtn">회기 번호를 제목에서 분리하기</button>'
     : ' · <button class="link-btn quiet" id="renumBtn">회기 번호 정리</button>';
   return `상담 ${js.length}회${ago !== null ? ` · 마지막 상담 ${ago <= 0 ? '오늘' : ago + '일 전'}` : ''}${fix}`;
 }
@@ -1605,6 +1609,10 @@ function openFeedback() {
 $('#fbBtn').onclick = openFeedback;
 
 // ---------- 관리자: 의견함 ----------
+// 다른 탭에 있다가 돌아오면 새 의견 수 다시 확인
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && user && isAdminUser()) loadFeedback().catch(() => {});
+});
 function adminTabs(on) {
   const n = feedback.filter((f) => f.status === 'new').length;
   return `<div class="seg" role="tablist" aria-label="관리자 메뉴">
